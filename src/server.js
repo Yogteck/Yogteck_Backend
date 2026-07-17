@@ -7,6 +7,7 @@ const nodemailer = require('nodemailer');
 
 const app = express();
 const port = Number(process.env.PORT || 5000);
+const enquiryRecipient = process.env.MAIL_TO || 'yogteck@gmail.com';
 
 const allowedOrigins = (process.env.FRONTEND_ORIGIN || 'http://localhost:4200')
   .split(',')
@@ -130,7 +131,7 @@ app.post('/api/enquiries/contact', async (req, res) => {
 
     await transporter.sendMail({
       from: process.env.MAIL_FROM || process.env.SMTP_USER,
-      to: requireEnv('MAIL_TO'),
+      to: enquiryRecipient,
       replyTo: enquiry.email,
       subject: `New YogTeck enquiry from ${enquiry.name}`,
       text: email.text,
