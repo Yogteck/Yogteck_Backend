@@ -67,6 +67,7 @@ function validateContactPayload(body) {
   } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(enquiry.email)) {
     errors.email = 'Enter a valid email address.';
   }
+  if (!enquiry.rackType) errors.rackType = 'Rack type is required.';
   if (!enquiry.message) errors.message = 'Message is required.';
 
   return {
