@@ -1,0 +1,158 @@
+require('dotenv').config();
+
+const express = require('express');
+const cors = require('cors');
+const helmet = require('helmet');
+const nodemailer = require('nodemailer');
+
+const app = express();
+const port = Number(process.env.PORT || 5000);
+
+const allowedOrigins = (process.env.FRONTEND_ORIGIN || 'http://localhost:4200')
+  .split(',')
+  .map(origin => origin.trim())
+  .filter(Boolean);
+
+app.use(helmet());
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+    callback(new Error('Not allowed by CORS'));
+  }
+}));
+app.use(express.json({ limit: '50kb' }));
+
+function requireEnv(name) {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`${name} is required`);
+  }
+  return value;
+}
+
+function createTransporter() {
+  return nodemailer.createTransport({
+    host: requireEnv('SMTP_HOST'),
+    port: Number(process.env.SMTP_PORT || 465),
+    secure: String(process.env.SMTP_SECURE || 'true') === 'true',
+    auth: {
+      user: requireEnv('SMTP_USER'),
+      pass: requireEnv('SMTP_PASS')
+    }
+  });
+}
+
+function cleanString(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function validateContactPayload(body) {
+  const enquiry = {
+    name: cleanString(body.name),
+    phone: cleanString(body.phone),
+    email: cleanString(body.email),
+    rackType: cleanString(body.rackType),
+    message: cleanString(body.message)
+  };
+
+  const errors = {};
+  if (!enquiry.name) errors.name = 'Name is required.';
+  if (!enquiry.phone) errors.phone = 'Phone is required.';
+  if (!enquiry.email) {
+    errors.email = 'Email is required.';
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(enquiry.email)) {
+    errors.email = 'Enter a valid email address.';
+  }
+  if (!enquiry.message) errors.message = 'Message is required.';
+
+  return {
+    enquiry,
+    errors,
+    isValid: Object.keys(errors).length === 0
+  };
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function renderContactEmail(enquiry) {
+  const rows = [
+    ['Name', enquiry.name],
+    ['Phone', enquiry.phone],
+    ['Email', enquiry.email],
+    ['Rack Type', enquiry.rackType || 'Not selected'],
+    ['Message', enquiry.message]
+  ];
+
+  const htmlRows = rows.map(([label, value]) => `
+    <tr>
+      <td style="padding:10px 12px;border:1px solid #ddd;font-weight:700;">${escapeHtml(label)}</td>
+      <td style="padding:10px 12px;border:1px solid #ddd;">${escapeHtml(value).replace(/\n/g, '<br>')}</td>
+    </tr>
+  `).join('');
+
+  const text = rows.map(([label, value]) => `${label}: ${value || 'Not selected'}`).join('\n');
+
+  return {
+    text,
+    html: `
+      <div style="font-family:Arial,sans-serif;line-height:1.5;color:#222;">
+        <h2>New YogTeck Website Enquiry</h2>
+        <table style="border-collapse:collapse;width:100%;max-width:680px;">${htmlRows}</table>
+      </div>
+    `
+  };
+}
+
+app.get('/api/health', (req, res) => {
+  res.json({ success: true, message: 'YogTeck backend is running.' });
+});
+
+app.post('/api/enquiries/contact', async (req, res) => {
+  const { enquiry, errors, isValid } = validateContactPayload(req.body || {});
+  if (!isValid) {
+    res.status(400).json({ success: false, message: 'Please check the form fields.', errors });
+    return;
+  }
+
+  try {
+    const transporter = createTransporter();
+    const email = renderContactEmail(enquiry);
+
+    await transporter.sendMail({
+      from: process.env.MAIL_FROM || process.env.SMTP_USER,
+      to: requireEnv('MAIL_TO'),
+      replyTo: enquiry.email,
+      subject: `New YogTeck enquiry from ${enquiry.name}`,
+      text: email.text,
+      html: email.html
+    });
+
+    res.json({ success: true, message: 'Enquiry sent successfully.' });
+  } catch (error) {
+    console.error('Failed to send enquiry email:', error);
+    res.status(500).json({ success: false, message: 'Unable to send enquiry right now.' });
+  }
+});
+
+app.use((req, res) => {
+  res.status(404).json({ success: false, message: 'API route not found.' });
+});
+
+app.use((error, req, res, next) => {
+  console.error(error);
+  res.status(500).json({ success: false, message: 'Internal server error.' });
+});
+
+app.listen(port, () => {
+  console.log(`YogTeck backend running on port ${port}`);
+});
