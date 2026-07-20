@@ -68,7 +68,7 @@ function validateContactPayload(body) {
 
   const errors = {};
   if (!enquiry.name) errors.name = 'Name is required.';
-  if (!enquiry.phone) errors.phone = 'Phone is required.';
+  if (!enquiry.phone) errors.phone = 'Mobile number is required.';
   if (!enquiry.email) {
     errors.email = 'Email is required.';
   } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(enquiry.email)) {
@@ -96,7 +96,7 @@ function escapeHtml(value) {
 function renderContactEmail(enquiry) {
   const rows = [
     ['Name', enquiry.name],
-    ['Phone', enquiry.phone],
+    ['Mobile Number', enquiry.phone],
     ['Email', enquiry.email],
     ['Rack Type', enquiry.rackType || 'Not selected'],
     ['Message', enquiry.message]
