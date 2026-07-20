@@ -41,6 +41,26 @@ function requireEnv(name) {
   return value;
 }
 
+function maskSecret(value) {
+  if (!value) return 'missing';
+  if (value.length <= 4) return 'set';
+  return `${value.slice(0, 2)}***${value.slice(-2)}`;
+}
+
+function getMailConfigLog() {
+  return {
+    FRONTEND_ORIGIN: process.env.FRONTEND_ORIGIN || null,
+    allowedOrigins,
+    SMTP_HOST: process.env.SMTP_HOST || null,
+    SMTP_PORT: process.env.SMTP_PORT || '465',
+    SMTP_SECURE: process.env.SMTP_SECURE || 'true',
+    SMTP_USER: process.env.SMTP_USER || null,
+    SMTP_PASS: maskSecret(process.env.SMTP_PASS),
+    MAIL_FROM: process.env.MAIL_FROM || process.env.SMTP_USER || null,
+    MAIL_TO: enquiryRecipient
+  };
+}
+
 function createTransporter() {
   return nodemailer.createTransport({
     host: requireEnv('SMTP_HOST'),
@@ -127,8 +147,15 @@ app.get('/api/health', (req, res) => {
 });
 
 app.post('/api/enquiries/contact', async (req, res) => {
+  console.log('Contact enquiry request received:', {
+    origin: req.get('origin') || null,
+    body: req.body || {},
+    mailConfig: getMailConfigLog()
+  });
+
   const { enquiry, errors, isValid } = validateContactPayload(req.body || {});
   if (!isValid) {
+    console.warn('Contact enquiry validation failed:', { enquiry, errors });
     res.status(400).json({ success: false, message: 'Please check the form fields.', errors });
     return;
   }
@@ -137,13 +164,30 @@ app.post('/api/enquiries/contact', async (req, res) => {
     const transporter = createTransporter();
     const email = renderContactEmail(enquiry);
 
-    await transporter.sendMail({
+    const mailOptions = {
       from: process.env.MAIL_FROM || process.env.SMTP_USER,
       to: enquiryRecipient,
       replyTo: enquiry.email,
       subject: `New YogTeck enquiry from ${enquiry.name}`,
       text: email.text,
       html: email.html
+    };
+
+    console.log('Sending contact enquiry email:', {
+      from: mailOptions.from,
+      to: mailOptions.to,
+      replyTo: mailOptions.replyTo,
+      subject: mailOptions.subject,
+      enquiry
+    });
+
+    const info = await transporter.sendMail(mailOptions);
+
+    console.log('Contact enquiry email sent:', {
+      messageId: info.messageId,
+      accepted: info.accepted,
+      rejected: info.rejected,
+      response: info.response
     });
 
     res.json({ success: true, message: 'Enquiry sent successfully.' });
