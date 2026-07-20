@@ -9,7 +9,12 @@ const app = express();
 const port = Number(process.env.PORT || 5000);
 const enquiryRecipient = process.env.MAIL_TO || 'yogteck@gmail.com';
 
-const allowedOrigins = (process.env.FRONTEND_ORIGIN || 'http://localhost:4200')
+const defaultFrontendOrigins = [
+  'http://localhost:4200',
+  'https://yogteck-frontend.vercel.app'
+];
+
+const allowedOrigins = (process.env.FRONTEND_ORIGIN || defaultFrontendOrigins.join(','))
   .split(',')
   .map(origin => origin.trim())
   .filter(Boolean);
