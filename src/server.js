@@ -14,8 +14,10 @@ const defaultFrontendOrigins = [
   'https://yogteck-frontend.vercel.app'
 ];
 
-const allowedOrigins = (process.env.FRONTEND_ORIGIN || defaultFrontendOrigins.join(','))
-  .split(',')
+const allowedOrigins = [
+  ...defaultFrontendOrigins,
+  ...(process.env.FRONTEND_ORIGIN || '').split(',')
+]
   .map(origin => origin.trim())
   .filter(Boolean);
 
