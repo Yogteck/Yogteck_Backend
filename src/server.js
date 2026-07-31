@@ -197,8 +197,45 @@ app.post('/api/enquiries/contact', async (req, res) => {
   }
 });
 
+// Redirect Analytics Storage
+const redirectLogs = new Map();
+
+app.post('/api/logs/redirect', (req, res) => {
+  const { invalidUrl, destination, timestamp } = req.body || {};
+  if (!invalidUrl) {
+    res.status(400).json({ success: false, message: 'invalidUrl is required.' });
+    return;
+  }
+
+  const key = `${invalidUrl.toLowerCase()} -> ${destination || '/'}`;
+  const existing = redirectLogs.get(key) || {
+    invalidUrl,
+    destination: destination || '/',
+    hits: 0,
+    firstSeen: timestamp || new Date().toISOString(),
+    lastSeen: timestamp || new Date().toISOString()
+  };
+
+  existing.hits += 1;
+  existing.lastSeen = timestamp || new Date().toISOString();
+  redirectLogs.set(key, existing);
+
+  console.log(`[SEO 404 REDIRECT LOGGED] ${invalidUrl} -> ${destination || '/'} (Hits: ${existing.hits})`);
+  res.json({ success: true, logged: existing });
+});
+
+app.get('/api/logs/redirect', (req, res) => {
+  const logs = Array.from(redirectLogs.values()).sort((a, b) => b.hits - a.hits);
+  res.json({ success: true, count: logs.length, logs });
+});
+
 app.use((req, res) => {
-  res.status(404).json({ success: false, message: 'API route not found.' });
+  if (req.path.startsWith('/api')) {
+    res.status(404).json({ success: false, message: 'API route not found.' });
+    return;
+  }
+  // 301 Permanent Redirect non-API requests to primary canonical URL
+  res.redirect(301, `https://yogteck.com${req.url}`);
 });
 
 app.use((error, req, res, next) => {
