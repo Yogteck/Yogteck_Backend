@@ -11,7 +11,9 @@ const enquiryRecipient = process.env.MAIL_TO || 'yogteck@gmail.com';
 
 const defaultFrontendOrigins = [
   'http://localhost:4200',
-  'https://yogteck-frontend.vercel.app'
+  'https://yogteck-frontend.vercel.app',
+  'https://yogteck.com',
+  'https://www.yogteck.com'
 ];
 
 const allowedOrigins = [
@@ -21,16 +23,19 @@ const allowedOrigins = [
   .map(origin => origin.trim())
   .filter(Boolean);
 
-app.use(helmet());
-app.use(cors({
-  origin(origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-      return;
-    }
-    callback(new Error('Not allowed by CORS'));
-  }
+app.use(helmet({
+  crossOriginResourcePolicy: false
 }));
+
+// Allow CORS with dynamic origin reflection for public enquiry API
+app.use(cors({
+  origin: true,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+}));
+
+app.options('*', cors());
 app.use(express.json({ limit: '50kb' }));
 
 function requireEnv(name) {
@@ -193,7 +198,8 @@ app.post('/api/enquiries/contact', async (req, res) => {
     res.json({ success: true, message: 'Enquiry sent successfully.' });
   } catch (error) {
     console.error('Failed to send enquiry email:', error);
-    res.status(500).json({ success: false, message: 'Unable to send enquiry right now.' });
+    const detail = error instanceof Error ? error.message : 'Unable to send enquiry right now.';
+    res.status(500).json({ success: false, message: 'Unable to send enquiry right now.', error: detail });
   }
 });
 
