@@ -3,11 +3,25 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const crypto = require('crypto');
 const nodemailer = require('nodemailer');
+const {
+  appendEnquiryToExcel,
+  readAllEnquiriesFromExcel,
+  getExcelFilePath,
+  existsExcelFile
+} = require('./services/excelService');
 
 const app = express();
 const port = Number(process.env.PORT || 5000);
 const enquiryRecipient = process.env.MAIL_TO || 'yogteck@gmail.com';
+
+// Static Admin Credentials (Case-sensitive)
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'Yogtek';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Yogtek 2026';
+
+// Active Session Storage: token -> { username, createdAt, expiresAt }
+const activeSessions = new Map();
 
 const defaultFrontendOrigins = [
   'http://localhost:4200',
@@ -27,7 +41,7 @@ app.use(helmet({
   crossOriginResourcePolicy: false
 }));
 
-// Allow CORS with dynamic origin reflection for public enquiry API
+// Allow CORS with dynamic origin reflection for public & admin enquiry APIs
 app.use(cors({
   origin: true,
   credentials: true,
@@ -168,7 +182,7 @@ function renderCustomerConfirmationEmail(enquiry) {
   const companyGreeting = enquiry.companyName ? ` (${escapeHtml(enquiry.companyName)})` : '';
 
   return {
-    text: `Dear ${enquiry.name},\n\nThank you for reaching out to YOGTECK! We have received your inquiry regarding "${enquiry.rackType || 'Website & Digital Solutions'}".\n\nOur solutions team is reviewing your requirements and will contact you within 2-4 business hours.\n\nSummary of your request:\n- Required Service: ${enquiry.rackType}\n- Contact Phone: ${enquiry.phone}\n${enquiry.companyName ? `- Company: ${enquiry.companyName}\n` : ''}\nIf you have urgent questions, feel free to WhatsApp us directly at +91 8299209905.\n\nBest regards,\nYOGTECK Digital Solutions Team\nhttps://yogteck.com\nEmail: yogteck@gmail.com\nPhone: +91 8299209905\nAddress: H-14, Sector 63, Noida, UP - 201301`,
+    text: `Dear ${enquiry.name},\n\nThank you for reaching out to YOGTECK! We have received your inquiry regarding "${enquiry.rackType || 'Website & Digital Solutions'}".\n\nOur solutions team is reviewing your requirements and will contact you within 2-4 business hours.\n\nSummary of your request:\n- Required Service: ${enquiry.rackType}\n- Contact Phone: ${enquiry.phone}\n${enquiry.companyName ? `- Company: ${enquiry.companyName}\n` : ''}\nIf you have urgent questions, feel free to WhatsApp us directly at +91 8299209905.\n\nBest regards,\nYOGTECK Digital Solutions Team\nhttps://yogteck.com\nEmail: yogteck@gmail.com\nPhone: +91 8299209905\nAddress: 302/2, Mangla Vihar 2, New PAC Line, Kanpur Nagar, UP - 208015`,
     html: `
       <div style="font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;line-height:1.6;color:#1e293b;max-width:640px;margin:0 auto;border:1px solid #cbd5e1;border-radius:10px;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,0.06);">
         
@@ -239,7 +253,7 @@ function renderCustomerConfirmationEmail(enquiry) {
         <!-- Footer -->
         <div style="background:#0a1330;padding:20px 24px;color:#94a3b8;font-size:12px;line-height:1.5;border-top:1px solid rgba(255,255,200,0.08);">
           <div style="color:#ffffff;font-weight:700;margin-bottom:4px;">YOGTECK Digital Solutions</div>
-          <div><strong>Address:</strong> H-14, Sector 63, Noida, Uttar Pradesh - 201301</div>
+          <div><strong>Registered Office:</strong> 302/2, Mangla Vihar 2, New PAC Line, Kanpur Nagar, UP - 208015</div>
           <div><strong>Phone:</strong> +91 8299209905 &bull; <strong>Email:</strong> yogteck@gmail.com</div>
           <div><strong>Website:</strong> <a href="https://yogteck.com" style="color:#ff9a1f;text-decoration:none;">https://yogteck.com</a></div>
         </div>
@@ -249,13 +263,111 @@ function renderCustomerConfirmationEmail(enquiry) {
   };
 }
 
+// Authentication Middleware
+function requireAdminAuth(req, res, next) {
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+
+  if (!token) {
+    return res.status(401).json({ success: false, message: 'Authentication required. Please log in.' });
+  }
+
+  const session = activeSessions.get(token);
+  if (!session || Date.now() > session.expiresAt) {
+    if (session) activeSessions.delete(token);
+    return res.status(401).json({ success: false, message: 'Session expired or invalid. Please log in again.' });
+  }
+
+  req.adminUser = session;
+  next();
+}
+
+// Health Check
 app.get('/api/health', (req, res) => {
   res.json({ success: true, message: 'YogTeck backend is running.' });
 });
 
+// Admin Login Endpoint (Validates static credentials server-side)
+app.post('/api/admin/login', (req, res) => {
+  const { username, password } = req.body || {};
+
+  if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000; // 7 days active session
+
+    activeSessions.set(token, {
+      username: ADMIN_USERNAME,
+      createdAt: Date.now(),
+      expiresAt
+    });
+
+    console.log(`[ADMIN LOGIN SUCCESS] User: ${ADMIN_USERNAME}`);
+    return res.json({
+      success: true,
+      message: 'Login successful.',
+      token,
+      user: {
+        username: ADMIN_USERNAME
+      }
+    });
+  }
+
+  console.warn(`[ADMIN LOGIN FAILED] Attempted with username: ${username}`);
+  return res.status(401).json({
+    success: false,
+    message: 'Invalid username or password.'
+  });
+});
+
+// Admin Session Verify Endpoint
+app.get('/api/admin/verify', requireAdminAuth, (req, res) => {
+  res.json({
+    success: true,
+    user: {
+      username: req.adminUser.username
+    }
+  });
+});
+
+// Admin Logout Endpoint
+app.post('/api/admin/logout', (req, res) => {
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+
+  if (token && activeSessions.has(token)) {
+    activeSessions.delete(token);
+  }
+
+  res.json({ success: true, message: 'Logged out successfully.' });
+});
+
+// Admin Inquiries List Endpoint (Protected)
+app.get('/api/admin/enquiries', requireAdminAuth, async (req, res) => {
+  try {
+    const data = await readAllEnquiriesFromExcel();
+    res.json({
+      success: true,
+      total: data.total,
+      inquiries: data.inquiries,
+      source: data.source
+    });
+  } catch (err) {
+    console.error('Error fetching enquiries for admin dashboard:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve enquiries data.',
+      error: err.message
+    });
+  }
+});
+
+// Public Contact / Inquiry Submission Endpoint
 app.post('/api/enquiries/contact', async (req, res) => {
+  const clientIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '';
+
   console.log('Contact enquiry request received:', {
     origin: req.get('origin') || null,
+    ip: clientIp,
     body: req.body || {},
     mailConfig: getMailConfigLog()
   });
@@ -267,10 +379,19 @@ app.post('/api/enquiries/contact', async (req, res) => {
     return;
   }
 
+  // 1. Record enquiry details, date, time & IP into Excel File
+  try {
+    const excelResult = await appendEnquiryToExcel(enquiry, clientIp);
+    console.log('Enquiry successfully recorded in Excel:', excelResult);
+  } catch (excelErr) {
+    console.error('Warning: Failed to write enquiry to Excel file:', excelErr);
+  }
+
+  // 2. Send Emails (Admin & Customer Confirmation)
   try {
     const transporter = createTransporter();
     
-    // 1. Prepare Admin Email (to yogteck@gmail.com)
+    // Prepare Admin Email (to yogteck@gmail.com)
     const adminEmail = renderAdminEnquiryEmail(enquiry);
     const adminMailOptions = {
       from: process.env.MAIL_FROM || process.env.SMTP_USER,
@@ -289,7 +410,7 @@ app.post('/api/enquiries/contact', async (req, res) => {
     const adminInfo = await transporter.sendMail(adminMailOptions);
     console.log('Admin enquiry email sent successfully:', adminInfo.messageId);
 
-    // 2. Prepare & Send Customer Confirmation Email (to user's email)
+    // Prepare & Send Customer Confirmation Email (to user's email)
     try {
       const customerEmail = renderCustomerConfirmationEmail(enquiry);
       const customerMailOptions = {
@@ -323,7 +444,22 @@ app.post('/api/enquiries/contact', async (req, res) => {
   }
 });
 
-
+// Download / Export Enquiries Excel Endpoint
+app.get('/api/enquiries/export', (req, res) => {
+  const filePath = getExcelFilePath();
+  if (!existsExcelFile()) {
+    res.status(404).json({ success: false, message: 'No enquiries recorded yet.' });
+    return;
+  }
+  res.download(filePath, 'yogteck_enquiries.xlsx', (err) => {
+    if (err) {
+      console.error('Error downloading Excel file:', err);
+      if (!res.headersSent) {
+        res.status(500).json({ success: false, message: 'Failed to download Excel file.' });
+      }
+    }
+  });
+});
 
 // Redirect Analytics Storage
 const redirectLogs = new Map();
