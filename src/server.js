@@ -495,7 +495,12 @@ app.get('/api/logs/redirect', (req, res) => {
 
 app.use((req, res) => {
   if (req.path.startsWith('/api')) {
-    res.status(404).json({ success: false, message: 'API route not found.' });
+    res.status(404).json({
+      success: false,
+      status: 404,
+      error: 'Not Found',
+      message: `API endpoint '${req.method} ${req.originalUrl}' does not exist.`
+    });
     return;
   }
   // 301 Permanent Redirect non-API requests to primary canonical URL
