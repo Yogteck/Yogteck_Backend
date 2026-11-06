@@ -27,6 +27,7 @@ const {
   getInvoiceByNo,
   getInvoiceByToken,
   createInvoice,
+  updateInvoice,
   addPayment,
   getPaymentsForInvoice,
   generateNextInvoiceNo
@@ -524,6 +525,30 @@ app.post('/api/admin/invoices', requireAdminAuth, async (req, res) => {
     }
     const created = await createInvoice(body);
     res.json({ success: true, message: 'Invoice created successfully.', invoice: created });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.put('/api/admin/invoices/:invoiceNo', requireAdminAuth, async (req, res) => {
+  try {
+    const body = req.body || {};
+    if (!body.clientId) {
+      return res.status(400).json({ success: false, message: 'Client ID is required.' });
+    }
+    if (!Array.isArray(body.items) || body.items.length === 0) {
+      return res.status(400).json({ success: false, message: 'At least one invoice line item is required.' });
+    }
+    for (const item of body.items) {
+      if (!item.description || !String(item.description).trim()) {
+        return res.status(400).json({ success: false, message: 'Item description is required for all lines.' });
+      }
+      if (Number(item.rate) <= 0) {
+        return res.status(400).json({ success: false, message: 'Item rate must be greater than zero.' });
+      }
+    }
+    const updated = await updateInvoice(req.params.invoiceNo, body);
+    res.json({ success: true, message: 'Invoice updated successfully.', invoice: updated });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

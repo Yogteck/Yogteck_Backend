@@ -589,6 +589,144 @@ async function createInvoice(invoiceData) {
   });
 }
 
+async function updateInvoice(invoiceNo, invoiceData) {
+  return executeWithLock(async () => {
+    await ensureClientsMasterInitialized();
+    await backupBeforeWrite();
+
+    const workbook = await loadWorkbook();
+    const invoicesSheet = workbook.getWorksheet('Invoices');
+    const itemsSheet = workbook.getWorksheet('InvoiceItems');
+    const paymentsSheet = workbook.getWorksheet('Payments');
+
+    // Find existing invoice row
+    let targetRowNumber = -1;
+    let existingInvoice = null;
+    invoicesSheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return;
+      const rowNo = row.getCell(1).value;
+      if (String(rowNo).trim() === String(invoiceNo).trim()) {
+        targetRowNumber = rowNumber;
+        existingInvoice = rowToObject('Invoices', row.values);
+      }
+    });
+
+    if (!existingInvoice || targetRowNumber === -1) {
+      throw new Error(`Invoice ${invoiceNo} not found.`);
+    }
+
+    // Process new items and recalculate totals
+    const rawItems = Array.isArray(invoiceData.items) ? invoiceData.items : [];
+    let taxableTotalPaise = 0;
+    let taxTotalPaise = 0;
+    let grandTotalPaise = 0;
+
+    const processedItems = rawItems.map((item, index) => {
+      const qty = Number(item.qty) || 1;
+      const ratePaise = toPaise(item.rate);
+      const taxableValuePaise = Math.round(qty * ratePaise);
+      const taxPercent = Number(item.taxPercent) || 0;
+      const taxAmountPaise = Math.round((taxableValuePaise * taxPercent) / 100);
+      const lineTotalPaise = taxableValuePaise + taxAmountPaise;
+
+      taxableTotalPaise += taxableValuePaise;
+      taxTotalPaise += taxAmountPaise;
+      grandTotalPaise += lineTotalPaise;
+
+      return {
+        invoiceNo,
+        srNo: index + 1,
+        description: sanitize(item.description || ''),
+        hsnSac: sanitize(item.hsnSac || ''),
+        qty,
+        unit: sanitize(item.unit || 'NOS'),
+        rate: roundToTwo(fromPaise(ratePaise)),
+        taxableValue: roundToTwo(fromPaise(taxableValuePaise)),
+        taxPercent,
+        taxAmount: roundToTwo(fromPaise(taxAmountPaise)),
+        lineTotal: roundToTwo(fromPaise(lineTotalPaise))
+      };
+    });
+
+    // Compute existing payments to accurately update status and balance
+    let totalPaidPaise = 0;
+    paymentsSheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return;
+      const rowInvNo = row.getCell(2).value;
+      if (String(rowInvNo).trim() === String(invoiceNo).trim()) {
+        const amt = row.getCell(3).value;
+        totalPaidPaise += toPaise(amt);
+      }
+    });
+
+    const grandTotal = roundToTwo(fromPaise(grandTotalPaise));
+    const totalPaid = roundToTwo(fromPaise(totalPaidPaise));
+    const balanceDue = Math.max(0, roundToTwo(fromPaise(grandTotalPaise - totalPaidPaise)));
+
+    let status = 'Unpaid';
+    if (balanceDue === 0 && grandTotal > 0) {
+      status = 'Paid';
+    } else if (totalPaid > 0 && balanceDue > 0) {
+      status = 'Partially Paid';
+    }
+
+    const updatedInvoiceRow = {
+      invoiceNo,
+      clientId: sanitize(invoiceData.clientId || existingInvoice.clientId || ''),
+      invoiceDate: invoiceData.invoiceDate || existingInvoice.invoiceDate,
+      dueDate: invoiceData.dueDate || existingInvoice.dueDate,
+      taxableTotal: roundToTwo(fromPaise(taxableTotalPaise)),
+      taxTotal: roundToTwo(fromPaise(taxTotalPaise)),
+      grandTotal,
+      status,
+      publicToken: existingInvoice.publicToken || crypto.randomBytes(16).toString('hex'),
+      notes: sanitize(invoiceData.notes !== undefined ? invoiceData.notes : (existingInvoice.notes || '')),
+      challanNo: sanitize(invoiceData.challanNo !== undefined ? invoiceData.challanNo : (existingInvoice.challanNo || '')),
+      challanDate: sanitize(invoiceData.challanDate !== undefined ? invoiceData.challanDate : (existingInvoice.challanDate || '')),
+      ewayBillNo: sanitize(invoiceData.ewayBillNo !== undefined ? invoiceData.ewayBillNo : (existingInvoice.ewayBillNo || '')),
+      transport: sanitize(invoiceData.transport !== undefined ? invoiceData.transport : (existingInvoice.transport || '')),
+      transportId: sanitize(invoiceData.transportId !== undefined ? invoiceData.transportId : (existingInvoice.transportId || '')),
+      planName: sanitize(invoiceData.planName || existingInvoice.planName || 'Annual Cloud & Maintenance Plan'),
+      serviceStartDate: sanitize(invoiceData.serviceStartDate || existingInvoice.serviceStartDate || ''),
+      serviceExpiryDate: sanitize(invoiceData.serviceExpiryDate || existingInvoice.serviceExpiryDate || ''),
+      renewalDueDate: sanitize(invoiceData.renewalDueDate || existingInvoice.renewalDueDate || '')
+    };
+
+    // Update row in Invoices sheet
+    const rowValues = objectToRowArray('Invoices', updatedInvoiceRow);
+    const targetRow = invoicesSheet.getRow(targetRowNumber);
+    for (let c = 0; c < rowValues.length; c++) {
+      targetRow.getCell(c + 1).value = rowValues[c];
+    }
+    targetRow.commit();
+
+    // Replace items in InvoiceItems sheet for this invoice
+    const rowsToDelete = [];
+    itemsSheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return;
+      const itemInvNo = row.getCell(1).value;
+      if (String(itemInvNo).trim() === String(invoiceNo).trim()) {
+        rowsToDelete.push(rowNumber);
+      }
+    });
+    for (let i = rowsToDelete.length - 1; i >= 0; i--) {
+      itemsSheet.spliceRows(rowsToDelete[i], 1);
+    }
+    processedItems.forEach(item => {
+      itemsSheet.addRow(objectToRowArray('InvoiceItems', item));
+    });
+
+    await workbook.xlsx.writeFile(CLIENTS_MASTER_PATH);
+
+    return {
+      ...updatedInvoiceRow,
+      items: processedItems,
+      totalPaid,
+      balanceDue
+    };
+  });
+}
+
 async function addPayment(invoiceNo, paymentData) {
   return executeWithLock(async () => {
     await ensureClientsMasterInitialized();
@@ -680,6 +818,7 @@ module.exports = {
   getInvoiceByNo,
   getInvoiceByToken,
   createInvoice,
+  updateInvoice,
   addPayment,
   getPaymentsForInvoice,
   generateNextInvoiceNo,
