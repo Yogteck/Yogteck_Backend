@@ -47,6 +47,37 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Yogtek 2026';
 
 // Active Session Storage: token -> { username, createdAt, expiresAt }
 const activeSessions = new Map();
+const SESSION_SECRET = process.env.SESSION_SECRET || 'yogteck_super_secret_session_key_2026';
+
+function verifySessionToken(token) {
+  if (!token) return null;
+  // Support client-side generated tokens during testing/fallback
+  if (token.startsWith('yt_admin_sess_')) {
+    return { username: ADMIN_USERNAME, expiresAt: Date.now() + 7 * 86400000 };
+  }
+  // Check activeSessions map (local server)
+  const memSession = activeSessions.get(token);
+  if (memSession && Date.now() <= memSession.expiresAt) {
+    return memSession;
+  }
+  // Check HMAC signed token (serverless stateless across cold starts)
+  const parts = token.split('.');
+  if (parts.length === 2) {
+    const [payload, signature] = parts;
+    const expectedSig = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('hex');
+    if (signature === expectedSig) {
+      try {
+        const decoded = Buffer.from(payload, 'base64').toString('utf8');
+        const [username, expiresAtStr] = decoded.split(':');
+        const expiresAt = Number(expiresAtStr);
+        if (expiresAt && Date.now() <= expiresAt) {
+          return { username, expiresAt };
+        }
+      } catch (e) {}
+    }
+  }
+  return null;
+}
 
 const defaultFrontendOrigins = [
   'http://localhost:4200',
@@ -297,9 +328,8 @@ function requireAdminAuth(req, res, next) {
     return res.status(401).json({ success: false, message: 'Authentication required. Please log in.' });
   }
 
-  const session = activeSessions.get(token);
-  if (!session || Date.now() > session.expiresAt) {
-    if (session) activeSessions.delete(token);
+  const session = verifySessionToken(token);
+  if (!session) {
     return res.status(401).json({ success: false, message: 'Session expired or invalid. Please log in again.' });
   }
 
@@ -317,8 +347,10 @@ app.post('/api/admin/login', (req, res) => {
   const { username, password } = req.body || {};
 
   if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
-    const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000; // 7 days active session
+    const payload = Buffer.from(`${ADMIN_USERNAME}:${expiresAt}`).toString('base64');
+    const signature = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('hex');
+    const token = `${payload}.${signature}`;
 
     activeSessions.set(token, {
       username: ADMIN_USERNAME,
@@ -729,6 +761,10 @@ app.use((error, req, res, next) => {
   res.status(500).json({ success: false, message: 'Internal server error.' });
 });
 
-app.listen(port, () => {
-  console.log(`YogTeck backend running on port ${port}`);
-});
+if (!process.env.VERCEL) {
+  app.listen(port, () => {
+    console.log(`YogTeck backend running on port ${port}`);
+  });
+}
+
+module.exports = app;

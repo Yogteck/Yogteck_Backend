@@ -2,11 +2,18 @@ const path = require('path');
 const fs = require('fs');
 const ExcelJS = require('exceljs');
 
-const COMPANY_FILE_PATH = path.join(__dirname, '..', '..', 'data', 'company_master.xlsx');
+const defaultDataDir = process.env.VERCEL
+  ? path.join('/tmp', 'yogteck-data')
+  : path.join(__dirname, '..', '..', 'data');
+
+const seedDataDir = path.join(__dirname, '..', '..', 'data');
+const dataDir = process.env.DATA_DIR || defaultDataDir;
+const COMPANY_FILE_PATH = path.join(dataDir, 'company_master.xlsx');
+const SEED_COMPANY_FILE = path.join(seedDataDir, 'company_master.xlsx');
 
 const DEFAULT_IMPORTANT_NOTES = `1) भुगतान और सर्विस रिन्यूअल / Payment & Service Renewal
 यदि भुगतान या रिन्यूअल में देरी होती है, तो सर्विसेज़ की अवधि समाप्त (Expire) हो जाने के कारण आपका प्रोजेक्ट/वेबसाइट कभी भी बंद हो सकता है। इसलिए कृपया सर्विसेज़ को निर्बाध रूप से चालू रखने के लिए समय पर भुगतान या रिन्यूअल कर लें। देरी की स्थिति में किसी भी प्रकार के नुकसान या डेटा/सेवा बाधा के लिए कंपनी उत्तरदायी नहीं होगी।
-Delay in payment or renewal may cause your services to expire and your project to go offline at any time. Please pay or renew on time to keep services active. The company will not be responsible for any interruption or loss caused by delayed payment.
+Delay in payment or renewal may cause your services to expire and your project/website to go offline at any time. Please pay or renew on time to keep services active. The company will not be responsible for any interruption or loss caused by delayed payment.
 
 2) सब्सक्रिप्शन की जानकारी / Subscription & Plan Details
 अपने सब्सक्रिप्शन से जुड़ी पूरी जानकारी देखने के लिए इस इनवॉइस पर दिए गए QR कोड को स्कैन करें। वहाँ आपको पूरा इनवॉइस दिखेगा, जिसमें आपके सभी प्लान, उनकी शुरुआत और समाप्ति की तिथियाँ (Expiry), भुगतान का इतिहास और बाकी रकम (Balance Due) सहित सभी संबंधित विवरण उपलब्ध होंगे।
@@ -14,7 +21,7 @@ Scan the QR code on this invoice to view your full invoice, active plan details,
 
 3) क्लाइंट द्वारा उपलब्ध कराई जाने वाली सामग्री / Materials & External Resources to be Provided by Client
 प्रोजेक्ट से जुड़ी सभी बाहरी (External) फाइलें, सेवाएँ और संसाधन क्लाइंट/पार्टी को ही उपलब्ध कराने होंगे। उदाहरण के लिए:
-• पेमेंट गेटवे (Payment Gateway) का अकाउंट/क्रेडेंशियल्स क्लाइंट द्वारा उपलब्ध कराया जाएगा।
+• पेमेंट गेटवे (Payment Gateway) का अकाउंट/क्रेडेंशइल्स क्लाइंट द्वारा उपलब्ध कराया जाएगा।
 • प्रोजेक्ट से जुड़ी क्लाइंट की अपनी फाइलें, जैसे CAD ड्रॉइंग्स, लोगो, कंटेंट, फोटो और अन्य दस्तावेज़ (जैसे MMR Constructions के प्रोजेक्ट में उनकी CAD फाइलें) क्लाइंट को ही देनी होंगी।
 इन सामग्रियों के अभाव या देरी से होने वाली किसी भी बाधा या विलंब की ज़िम्मेदारी कंपनी की नहीं होगी।
 All external files, accounts, and resources required for the project (e.g. payment gateway credentials, CAD files, logo, content, photos) must be provided by the client; the company cannot be held responsible for delays arising from their absence.`;
@@ -85,13 +92,25 @@ function desanitizeFromExcel(val) {
 }
 
 async function ensureCompanyMasterInitialized() {
-  const dir = path.dirname(COMPANY_FILE_PATH);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+  if (!fs.existsSync(dataDir)) {
+    try {
+      fs.mkdirSync(dataDir, { recursive: true });
+    } catch (e) {
+      console.warn('[COMPANY DIR MKDIR]', e.message);
+    }
+  }
+
+  // If in Vercel/tmp and file not in /tmp yet, copy from seed if exists
+  if (!fs.existsSync(COMPANY_FILE_PATH) && fs.existsSync(SEED_COMPANY_FILE)) {
+    try {
+      fs.copyFileSync(SEED_COMPANY_FILE, COMPANY_FILE_PATH);
+      return;
+    } catch (e) {
+      console.warn('Could not copy seed company file:', e.message);
+    }
   }
 
   if (fs.existsSync(COMPANY_FILE_PATH)) {
-    // Check if column 20 (Important Notes) exists
     try {
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.readFile(COMPANY_FILE_PATH);
@@ -150,6 +169,10 @@ async function ensureCompanyMasterInitialized() {
 async function getCompanyMaster() {
   await ensureCompanyMasterInitialized();
 
+  if (!fs.existsSync(COMPANY_FILE_PATH)) {
+    return { ...DEFAULT_COMPANY_DATA };
+  }
+
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(COMPANY_FILE_PATH);
   const sheet = workbook.getWorksheet('Company') || workbook.worksheets[0];
@@ -179,7 +202,9 @@ async function updateCompanyMaster(updatedData) {
   await ensureCompanyMasterInitialized();
 
   const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.readFile(COMPANY_FILE_PATH);
+  if (fs.existsSync(COMPANY_FILE_PATH)) {
+    await workbook.xlsx.readFile(COMPANY_FILE_PATH);
+  }
   let sheet = workbook.getWorksheet('Company');
   if (!sheet) {
     sheet = workbook.addWorksheet('Company');

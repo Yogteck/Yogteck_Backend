@@ -3,8 +3,15 @@ const fs = require('fs');
 const crypto = require('crypto');
 const ExcelJS = require('exceljs');
 
-const CLIENTS_MASTER_PATH = path.join(__dirname, '..', '..', 'data', 'clients_master.xlsx');
-const BACKUP_DIR = path.join(__dirname, '..', '..', 'data', 'backup');
+const defaultDataDir = process.env.VERCEL
+  ? path.join('/tmp', 'yogteck-data')
+  : path.join(__dirname, '..', '..', 'data');
+
+const seedDataDir = path.join(__dirname, '..', '..', 'data');
+const dataDir = process.env.DATA_DIR || defaultDataDir;
+const CLIENTS_MASTER_PATH = path.join(dataDir, 'clients_master.xlsx');
+const SEED_CLIENTS_FILE = path.join(seedDataDir, 'clients_master.xlsx');
+const BACKUP_DIR = path.join(dataDir, 'backup');
 
 // In-process Write Lock Queue
 let writeQueue = Promise.resolve();
@@ -55,7 +62,11 @@ async function backupBeforeWrite() {
   if (!fs.existsSync(CLIENTS_MASTER_PATH)) return;
 
   if (!fs.existsSync(BACKUP_DIR)) {
-    fs.mkdirSync(BACKUP_DIR, { recursive: true });
+    try {
+      fs.mkdirSync(BACKUP_DIR, { recursive: true });
+    } catch (e) {
+      console.warn('[BACKUP MKDIR]', e.message);
+    }
   }
 
   const now = new Date();
@@ -148,7 +159,9 @@ function objectToRowArray(sheetName, obj) {
 
 async function loadWorkbook() {
   const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.readFile(CLIENTS_MASTER_PATH);
+  if (fs.existsSync(CLIENTS_MASTER_PATH)) {
+    await workbook.xlsx.readFile(CLIENTS_MASTER_PATH);
+  }
   for (const [sheetName, columns] of Object.entries(SCHEMAS)) {
     const sheet = workbook.getWorksheet(sheetName);
     if (sheet) {
@@ -159,9 +172,22 @@ async function loadWorkbook() {
 }
 
 async function ensureClientsMasterInitialized() {
-  const dir = path.dirname(CLIENTS_MASTER_PATH);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+  if (!fs.existsSync(dataDir)) {
+    try {
+      fs.mkdirSync(dataDir, { recursive: true });
+    } catch (e) {
+      console.warn('[CLIENTS DIR MKDIR]', e.message);
+    }
+  }
+
+  // If in Vercel/tmp and file not in /tmp yet, copy from seed if exists
+  if (!fs.existsSync(CLIENTS_MASTER_PATH) && fs.existsSync(SEED_CLIENTS_FILE)) {
+    try {
+      fs.copyFileSync(SEED_CLIENTS_FILE, CLIENTS_MASTER_PATH);
+      return;
+    } catch (e) {
+      console.warn('Could not copy seed clients file:', e.message);
+    }
   }
 
   if (fs.existsSync(CLIENTS_MASTER_PATH)) {
@@ -177,7 +203,6 @@ async function ensureClientsMasterInitialized() {
         formatHeader(sheet);
         modified = true;
       } else {
-        // Check if all schema columns exist in header row
         const existingHeaders = [];
         sheet.getRow(1).eachCell((cell) => {
           existingHeaders.push(String(cell.value || '').trim().toLowerCase());
@@ -238,8 +263,9 @@ async function ensureClientsMasterInitialized() {
 
 async function readSheetRows(sheetName) {
   await ensureClientsMasterInitialized();
-  const workbook = await loadWorkbook();
+  if (!fs.existsSync(CLIENTS_MASTER_PATH)) return [];
 
+  const workbook = await loadWorkbook();
   const sheet = workbook.getWorksheet(sheetName);
   if (!sheet) return [];
 
@@ -247,13 +273,12 @@ async function readSheetRows(sheetName) {
   const rows = [];
 
   sheet.eachRow((row, rowNumber) => {
-    if (rowNumber === 1) return; // skip header
+    if (rowNumber === 1) return;
     const item = {};
     columns.forEach((col, idx) => {
       const cellVal = row.getCell(idx + 1).value;
       item[col.key] = desanitize(cellVal);
     });
-    // Check if row has at least primary key
     if (item[columns[0].key]) {
       rows.push(item);
     }
@@ -325,7 +350,6 @@ async function getAllInvoices() {
 
   const clientMap = new Map(clients.map(c => [c.clientId, c]));
 
-  // Compute aggregated payments per invoice
   const paymentsByInvoice = new Map();
   payments.forEach(p => {
     const list = paymentsByInvoice.get(p.invoiceNo) || [];
@@ -401,7 +425,6 @@ async function getInvoiceByToken(publicToken) {
 // WRITE OPERATIONS (Protected with Mutex Queue & Backup)
 // ----------------------------------------------------------------------
 
-// Generate Next Invoice Number: YOGTECK-YYYY-MM-NNN
 async function generateNextInvoiceNo() {
   await ensureClientsMasterInitialized();
   const invoices = await readSheetRows('Invoices');
@@ -426,7 +449,6 @@ async function generateNextInvoiceNo() {
   return `${prefix}${nextNum}`;
 }
 
-// Generate Next Client ID: YT-CLI-NNN
 async function generateNextClientId() {
   const clients = await getAllClients();
   let maxNum = 0;
@@ -439,7 +461,6 @@ async function generateNextClientId() {
   return `YT-CLI-${String(maxNum + 1).padStart(3, '0')}`;
 }
 
-// Save or Update Client
 async function saveClient(clientData) {
   return executeWithLock(async () => {
     await ensureClientsMasterInitialized();
@@ -485,7 +506,6 @@ async function saveClient(clientData) {
   });
 }
 
-// Create New Invoice
 async function createInvoice(invoiceData) {
   return executeWithLock(async () => {
     await ensureClientsMasterInitialized();
@@ -496,9 +516,8 @@ async function createInvoice(invoiceData) {
     const itemsSheet = workbook.getWorksheet('InvoiceItems');
 
     const invoiceNo = invoiceData.invoiceNo || await generateNextInvoiceNo();
-    const publicToken = crypto.randomBytes(16).toString('hex'); // 32 random chars
+    const publicToken = crypto.randomBytes(16).toString('hex');
 
-    // Compute Item totals with integer paise precision
     const rawItems = Array.isArray(invoiceData.items) ? invoiceData.items : [];
     let taxableTotalPaise = 0;
     let taxTotalPaise = 0;
@@ -555,7 +574,6 @@ async function createInvoice(invoiceData) {
 
     invoicesSheet.addRow(objectToRowArray('Invoices', invoiceRow));
 
-    // Add items
     processedItems.forEach(item => {
       itemsSheet.addRow(objectToRowArray('InvoiceItems', item));
     });
@@ -571,7 +589,6 @@ async function createInvoice(invoiceData) {
   });
 }
 
-// Add Payment for Invoice
 async function addPayment(invoiceNo, paymentData) {
   return executeWithLock(async () => {
     await ensureClientsMasterInitialized();
@@ -581,7 +598,6 @@ async function addPayment(invoiceNo, paymentData) {
     const invoicesSheet = workbook.getWorksheet('Invoices');
     const paymentsSheet = workbook.getWorksheet('Payments');
 
-    // Find invoice row
     let invoiceRow = null;
     let currentGrandTotal = 0;
 
@@ -597,7 +613,6 @@ async function addPayment(invoiceNo, paymentData) {
       throw new Error(`Invoice ${invoiceNo} not found.`);
     }
 
-    // Calculate existing payments
     let existingPaidPaise = 0;
     paymentsSheet.eachRow((row, rowNumber) => {
       if (rowNumber === 1) return;
@@ -633,14 +648,12 @@ async function addPayment(invoiceNo, paymentData) {
 
     paymentsSheet.addRow(objectToRowArray('Payments', newPayment));
 
-    // Update Status in Invoices row
     const totalPaidPaise = existingPaidPaise + newAmountPaise;
     let newStatus = 'Partially Paid';
     if (totalPaidPaise >= grandTotalPaise) {
       newStatus = 'Paid';
     }
 
-    // Col 8 is Status in SCHEMAS.Invoices
     invoiceRow.getCell(8).value = newStatus;
     invoiceRow.commit();
 
