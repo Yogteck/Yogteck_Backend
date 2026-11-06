@@ -550,6 +550,12 @@ async function createInvoice(invoiceData) {
       };
     });
 
+    const explicitCost = Number(invoiceData.projectCost || invoiceData.grandTotal) || 0;
+    if (explicitCost > 0) {
+      grandTotalPaise = toPaise(explicitCost);
+      taxableTotalPaise = grandTotalPaise;
+    }
+
     const initialPaid = Number(invoiceData.amountPaid != null ? invoiceData.amountPaid : invoiceData.totalPaid) || 0;
     const initialPaidPaise = toPaise(initialPaid);
     const balanceDuePaise = Math.max(0, grandTotalPaise - initialPaidPaise);
@@ -591,16 +597,32 @@ async function createInvoice(invoiceData) {
 
     if (initialPaidPaise > 0) {
       const paymentsSheet = workbook.getWorksheet('Payments');
-      const paymentId = `YT-PAY-${Date.now().toString().slice(-6)}`;
-      const paymentRow = {
-        paymentId,
-        invoiceNo,
-        amountPaid: roundToTwo(fromPaise(initialPaidPaise)),
-        paymentDate: invoiceData.paymentDate || invoiceData.invoiceDate || new Date().toISOString().slice(0, 10),
-        mode: sanitize(invoiceData.paymentMode || 'UPI'),
-        note: sanitize(invoiceData.paymentNote || 'Initial Payment')
-      };
-      paymentsSheet.addRow(objectToRowArray('Payments', paymentRow));
+      const itemsSumPaise = processedItems.reduce((acc, it) => acc + toPaise(it.lineTotal), 0);
+      if (processedItems.length > 1 && itemsSumPaise === initialPaidPaise) {
+        processedItems.forEach((it, idx) => {
+          const paymentId = `YT-PAY-${Date.now().toString().slice(-6)}-${idx + 1}`;
+          const paymentRow = {
+            paymentId,
+            invoiceNo,
+            amountPaid: it.lineTotal,
+            paymentDate: it.paymentDate || invoiceData.paymentDate || invoiceData.invoiceDate || new Date().toISOString().slice(0, 10),
+            mode: sanitize(invoiceData.paymentMode || 'UPI'),
+            note: sanitize(`Part ${idx + 1}: ${it.description || 'Installment'}`)
+          };
+          paymentsSheet.addRow(objectToRowArray('Payments', paymentRow));
+        });
+      } else {
+        const paymentId = `YT-PAY-${Date.now().toString().slice(-6)}`;
+        const paymentRow = {
+          paymentId,
+          invoiceNo,
+          amountPaid: roundToTwo(fromPaise(initialPaidPaise)),
+          paymentDate: invoiceData.paymentDate || invoiceData.invoiceDate || new Date().toISOString().slice(0, 10),
+          mode: sanitize(invoiceData.paymentMode || 'UPI'),
+          note: sanitize(invoiceData.paymentNote || 'Payment Received')
+        };
+        paymentsSheet.addRow(objectToRowArray('Payments', paymentRow));
+      }
     }
 
     await workbook.xlsx.writeFile(CLIENTS_MASTER_PATH);
@@ -684,6 +706,12 @@ async function updateInvoice(invoiceNo, invoiceData) {
       }
     });
 
+    const explicitCost = Number(invoiceData.projectCost || invoiceData.grandTotal) || 0;
+    if (explicitCost > 0) {
+      grandTotalPaise = toPaise(explicitCost);
+      taxableTotalPaise = grandTotalPaise;
+    }
+
     if (invoiceData.amountPaid !== undefined) {
       const explicitPaidPaise = toPaise(invoiceData.amountPaid);
       if (explicitPaidPaise !== totalPaidPaise) {
@@ -700,16 +728,32 @@ async function updateInvoice(invoiceNo, invoiceData) {
         }
         totalPaidPaise = explicitPaidPaise;
         if (explicitPaidPaise > 0) {
-          const paymentId = `YT-PAY-${Date.now().toString().slice(-6)}`;
-          const paymentRow = {
-            paymentId,
-            invoiceNo,
-            amountPaid: roundToTwo(fromPaise(explicitPaidPaise)),
-            paymentDate: invoiceData.paymentDate || invoiceData.invoiceDate || new Date().toISOString().slice(0, 10),
-            mode: sanitize(invoiceData.paymentMode || 'UPI'),
-            note: sanitize(invoiceData.paymentNote || 'Updated Payment')
-          };
-          paymentsSheet.addRow(objectToRowArray('Payments', paymentRow));
+          const itemsSumPaise = processedItems.reduce((acc, it) => acc + toPaise(it.lineTotal), 0);
+          if (processedItems.length > 1 && itemsSumPaise === explicitPaidPaise) {
+            processedItems.forEach((it, idx) => {
+              const paymentId = `YT-PAY-${Date.now().toString().slice(-6)}-${idx + 1}`;
+              const paymentRow = {
+                paymentId,
+                invoiceNo,
+                amountPaid: it.lineTotal,
+                paymentDate: it.paymentDate || invoiceData.paymentDate || invoiceData.invoiceDate || new Date().toISOString().slice(0, 10),
+                mode: sanitize(invoiceData.paymentMode || 'UPI'),
+                note: sanitize(`Part ${idx + 1}: ${it.description || 'Installment'}`)
+              };
+              paymentsSheet.addRow(objectToRowArray('Payments', paymentRow));
+            });
+          } else {
+            const paymentId = `YT-PAY-${Date.now().toString().slice(-6)}`;
+            const paymentRow = {
+              paymentId,
+              invoiceNo,
+              amountPaid: roundToTwo(fromPaise(explicitPaidPaise)),
+              paymentDate: invoiceData.paymentDate || invoiceData.invoiceDate || new Date().toISOString().slice(0, 10),
+              mode: sanitize(invoiceData.paymentMode || 'UPI'),
+              note: sanitize(invoiceData.paymentNote || 'Payment Received')
+            };
+            paymentsSheet.addRow(objectToRowArray('Payments', paymentRow));
+          }
         }
       }
     }
