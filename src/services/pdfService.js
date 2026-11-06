@@ -40,6 +40,28 @@ function formatINR(amount) {
   return `${isNegative ? '-' : ''}₹${formattedInt}.${decPart}`;
 }
 
+// Format Display Date DD/MM/YYYY
+function formatDisplayDate(d) {
+  if (!d) return '-';
+  const str = String(d).trim();
+  if (!str) return '-';
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(str)) return str;
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    const p = str.slice(0, 10).split('-');
+    return `${p[2]}/${p[1]}/${p[0]}`;
+  }
+  if (/^\d{2}-\d{2}-\d{4}$/.test(str)) {
+    const p = str.split('-');
+    return `${p[0]}/${p[1]}/${p[2]}`;
+  }
+  const dt = new Date(str);
+  if (isNaN(dt.getTime())) return str;
+  const dd = String(dt.getDate()).padStart(2, '0');
+  const mm = String(dt.getMonth() + 1).padStart(2, '0');
+  const yyyy = dt.getFullYear();
+  return `${dd}/${mm}/${yyyy}`;
+}
+
 // Convert Logo file to Base64
 function getLogoBase64(logoPath) {
   try {
@@ -59,6 +81,25 @@ function getLogoBase64(logoPath) {
     }
   } catch (e) {
     console.warn('[PDF LOGO]', e.message);
+  }
+  return null;
+}
+
+// Convert Payment PhonePe QR file to Base64
+function getPaymentQrBase64() {
+  try {
+    const candidates = [
+      path.resolve(__dirname, '..', '..', 'data', 'payment-qr.jpg'),
+      path.resolve(__dirname, '..', '..', '..', 'Yogteck-Frontend', 'public', 'assets', 'payment-qr.jpg')
+    ];
+    for (const f of candidates) {
+      if (fs.existsSync(f)) {
+        const buffer = fs.readFileSync(f);
+        return `data:image/jpeg;base64,${buffer.toString('base64')}`;
+      }
+    }
+  } catch (e) {
+    console.warn('[PAYMENT QR]', e.message);
   }
   return null;
 }
@@ -91,6 +132,7 @@ async function buildInvoiceHtml(invoice, company, baseUrl = 'https://yogteck.com
   const isInterState = companyStateCode !== clientStateCode && Boolean(clientStateCode);
 
   const logoBase64 = getLogoBase64(company.logoPath);
+  const paymentQrBase64 = getPaymentQrBase64();
 
   // 1. Balance QR (links to public invoice view)
   const publicViewUrl = `${baseUrl}/invoice/view/${invoice.publicToken || 'sample-token'}`;
@@ -796,7 +838,7 @@ async function buildInvoiceHtml(invoice, company, baseUrl = 'https://yogteck.com
             <td class="rm-label">Invoice No.</td>
             <td class="rm-val">${invoice.invoiceNo}</td>
             <td class="rm-label">Invoice Date</td>
-            <td class="rm-val">${invoice.invoiceDate}</td>
+            <td class="rm-val">${formatDisplayDate(invoice.invoiceDate)}</td>
           </tr>
           ${invoice.planName ? `
           <tr>
@@ -806,16 +848,16 @@ async function buildInvoiceHtml(invoice, company, baseUrl = 'https://yogteck.com
           ${invoice.serviceStartDate ? `
           <tr>
             <td class="rm-label">Plan Active</td>
-            <td class="rm-val">${invoice.serviceStartDate}</td>
+            <td class="rm-val">${formatDisplayDate(invoice.serviceStartDate)}</td>
             <td class="rm-label">Plan Expiry</td>
-            <td class="rm-val">${invoice.serviceExpiryDate || '-'}</td>
+            <td class="rm-val">${formatDisplayDate(invoice.serviceExpiryDate)}</td>
           </tr>` : ''}
           ${invoice.challanNo ? `
           <tr>
             <td class="rm-label">Challan No</td>
             <td class="rm-val">${invoice.challanNo}</td>
             <td class="rm-label">Challan Date</td>
-            <td class="rm-val">${invoice.challanDate || '-'}</td>
+            <td class="rm-val">${formatDisplayDate(invoice.challanDate)}</td>
           </tr>` : ''}
           ${invoice.ewayBillNo ? `
           <tr>
@@ -830,30 +872,24 @@ async function buildInvoiceHtml(invoice, company, baseUrl = 'https://yogteck.com
             <td class="rm-val">${invoice.transportId || '-'}</td>
           </tr>` : ''}
           <tr>
-            <td class="rm-label">Renewal Due</td>
-            <td class="rm-val" colspan="3">${invoice.renewalDueDate || invoice.dueDate || 'Upon Receipt'}</td>
+            <td class="rm-label">Due Date</td>
+            <td class="rm-val" colspan="3">${formatDisplayDate(invoice.dueDate || invoice.renewalDueDate)}</td>
           </tr>
         </table>
       </td>
     </tr>
   </table>
 
-  <!-- 4. Items Table (9 columns matching sample layout) -->
+  <!-- 4. Items Table (No HSN, No Tax; With Payment Date) -->
   <table class="items-table">
     <thead>
       <tr>
-        <th style="width: 5%;">Sr.<br>No.</th>
-        <th style="width: ${isGstEnabled ? '36%' : '52%'};">Name of Product / Service</th>
-        <th style="width: 10%;">HSN / SAC</th>
-        <th style="width: 7%;">Qty</th>
+        <th style="width: 6%;">Sr.<br>No.</th>
+        <th style="width: 44%;">Name of Product / Service</th>
+        <th style="width: 16%;">Payment Date</th>
+        <th style="width: 10%;">Qty</th>
         <th style="width: 12%;">Rate</th>
-        <th style="width: 12%;">Taxable Value</th>
-        ${isGstEnabled ? `
-        <th colspan="2" style="width: 18%;">
-          ${isInterState ? 'IGST' : 'CGST + SGST'}<br>
-          <span style="font-size: 8px; font-weight: normal;">% &nbsp;|&nbsp; Amount</span>
-        </th>` : ''}
-        <th style="width: ${isGstEnabled ? '14%' : '14%'};">Total</th>
+        <th style="width: 12%;">Total</th>
       </tr>
     </thead>
     <tbody>
@@ -861,14 +897,10 @@ async function buildInvoiceHtml(invoice, company, baseUrl = 'https://yogteck.com
         <tr class="row-item">
           <td class="text-center">${idx + 1}</td>
           <td class="text-left"><strong>${item.description}</strong></td>
-          <td class="text-center">${item.hsnSac || '-'}</td>
-          <td class="text-center">${item.qty} ${item.unit || ''}</td>
+          <td class="text-center">${formatDisplayDate(item.paymentDate || invoice.paymentDate || invoice.invoiceDate)}</td>
+          <td class="text-center">${item.qty} ${item.unit || 'NOS'}</td>
           <td class="text-right">${formatINR(item.rate)}</td>
-          <td class="text-right">${formatINR(item.taxableValue)}</td>
-          ${isGstEnabled ? `
-          <td class="text-center" style="width: 7%;">${item.taxPercent}%</td>
-          <td class="text-right" style="width: 11%;">${formatINR(item.taxAmount)}</td>` : ''}
-          <td class="text-right"><strong>${formatINR(item.lineTotal)}</strong></td>
+          <td class="text-right"><strong>${formatINR(item.lineTotal || (item.qty * item.rate))}</strong></td>
         </tr>
       `).join('')}
 
@@ -881,21 +913,13 @@ async function buildInvoiceHtml(invoice, company, baseUrl = 'https://yogteck.com
           <td>&nbsp;</td>
           <td>&nbsp;</td>
           <td>&nbsp;</td>
-          ${isGstEnabled ? '<td>&nbsp;</td><td>&nbsp;</td>' : ''}
-          <td>&nbsp;</td>
         </tr>
       `).join('')}
 
       <!-- Total Row -->
       <tr class="total-row">
-        <td colspan="3" class="text-right" style="font-weight: 800;">Total</td>
-        <td class="text-center"><strong>${totalQty} NOS</strong></td>
-        <td></td>
-        <td class="text-right"><strong>${formatINR(taxableTotal)}</strong></td>
-        ${isGstEnabled ? `
-        <td></td>
-        <td class="text-right"><strong>${formatINR(totalTax)}</strong></td>` : ''}
-        <td class="text-right"><strong>${formatINR(invoice.grandTotal)}</strong></td>
+        <td colspan="4" class="text-right" style="font-weight: 800;">Total Amount</td>
+        <td colspan="2" class="text-right"><strong>${formatINR(invoice.grandTotal)}</strong></td>
       </tr>
     </tbody>
   </table>
@@ -916,15 +940,15 @@ async function buildInvoiceHtml(invoice, company, baseUrl = 'https://yogteck.com
           <tr>
             <td class="bank-details-cell">
               <div class="bank-title">Bank Details</div>
-              <div class="bank-row"><span class="bank-lbl">Name</span> <span class="bank-val">${company.bankName}</span></div>
-              <div class="bank-row"><span class="bank-lbl">Branch</span> <span class="bank-val">${company.branch}</span></div>
-              <div class="bank-row"><span class="bank-lbl">Acc. Number</span> <span class="bank-val">${company.accountNo}</span></div>
-              <div class="bank-row"><span class="bank-lbl">IFSC</span> <span class="bank-val">${company.ifsc}</span></div>
+              <div class="bank-row"><span class="bank-lbl">Name</span> <span class="bank-val">${company.bankName || 'BANK OF INDIA'}</span></div>
+              <div class="bank-row"><span class="bank-lbl">Branch</span> <span class="bank-val">${company.branch || 'Kanpur'}</span></div>
+              <div class="bank-row"><span class="bank-lbl">Acc. Number</span> <span class="bank-val">${company.accountNo || '731410110007057'}</span></div>
+              <div class="bank-row"><span class="bank-lbl">IFSC</span> <span class="bank-val">${company.ifsc || 'BKID0007336'}</span></div>
               ${company.upiId ? `<div class="bank-row"><span class="bank-lbl">UPI ID</span> <span class="bank-val">${company.upiId}</span></div>` : ''}
             </td>
             <td class="qr-cell">
-              ${balanceQrUrl ? `<img src="${balanceQrUrl}" class="qr-img" alt="QR Code"><div class="qr-caption">Scan to check balance</div>` : ''}
-              ${upiQrUrl ? `<img src="${upiQrUrl}" class="qr-img" style="margin-top:4px;" alt="UPI QR"><div class="qr-caption">Pay using UPI</div>` : ''}
+              ${paymentQrBase64 ? `<img src="${paymentQrBase64}" class="qr-img" style="width: 78px; height: 78px; object-fit: contain;" alt="UPI QR">` : (balanceQrUrl ? `<img src="${balanceQrUrl}" class="qr-img" alt="QR Code">` : '')}
+              <div class="qr-caption" style="font-weight: 800; color: #0A1330; text-transform: uppercase;">Pay using UPI</div>
             </td>
           </tr>
         </table>
@@ -944,48 +968,47 @@ async function buildInvoiceHtml(invoice, company, baseUrl = 'https://yogteck.com
       <!-- Right Cell: Calculations, Payments Received, Signatory -->
       <td class="bottom-right-cell">
         <table class="calc-table">
-          <tr>
-            <td class="calc-label">Taxable Amount</td>
-            <td class="calc-val">${formatINR(taxableTotal)}</td>
-          </tr>
-          ${isGstEnabled ? (
-            isInterState ? `
-              <tr>
-                <td class="calc-label">Add : IGST</td>
-                <td class="calc-val">${formatINR(totalTax)}</td>
-              </tr>
-            ` : `
-              <tr>
-                <td class="calc-label">Add : CGST</td>
-                <td class="calc-val">${formatINR(halfTax)}</td>
-              </tr>
-              <tr>
-                <td class="calc-label">Add : SGST</td>
-                <td class="calc-val">${formatINR(halfTax)}</td>
-              </tr>
-            `
-          ) : ''}
-          ${isGstEnabled ? `
-          <tr>
-            <td class="calc-label">Total Tax</td>
-            <td class="calc-val">${formatINR(totalTax)}</td>
-          </tr>` : ''}
           <tr class="total-amt-row">
-            <td class="calc-label" style="font-size: 11px;">Total Amount After Tax</td>
+            <td class="calc-label" style="font-size: 11px;">Total Amount</td>
             <td class="calc-val" style="font-size: 12.5px;">${formatINR(invoice.grandTotal)}</td>
           </tr>
         </table>
 
         <div class="eoe-tag">(E &amp; O.E.)</div>
 
-        <!-- NEW: Payments Received Table -->
+        <!-- Payments Received Table -->
         <div class="payments-section">
           <div class="payments-title">
-            <span>Payments Received</span>
+            <span>Payment Details</span>
             <span class="status-badge">${invoice.status}</span>
           </div>
 
           ${Array.isArray(invoice.payments) && invoice.payments.length > 0 ? `
+            <table class="payments-mini-table">
+              <thead>
+                <tr>
+                  <th>Sr</th>
+                  <th>Date</th>
+                  <th>Mode</th>
+                  <th>Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${invoice.payments.map((p, pIdx) => `
+                  <tr>
+                    <td class="text-center">${pIdx + 1}</td>
+                    <td class="text-center">${formatDisplayDate(p.paymentDate)}</td>
+                    <td class="text-center">${p.mode || 'UPI'}</td>
+                    <td class="text-right"><strong>${formatINR(p.amountPaid)}</strong></td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          ` : `
+            <div style="font-size: 8.5px; color: #64748b; font-style: italic; margin-bottom: 3px;">
+              ${invoice.status === 'Paid' ? `Full Payment Recorded on ${formatDisplayDate(invoice.paymentDate || invoice.invoiceDate)}.` : 'No payments recorded yet.'}
+            </div>
+          `}
             <table class="payments-mini-table">
               <thead>
                 <tr>
