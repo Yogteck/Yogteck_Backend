@@ -519,8 +519,8 @@ app.post('/api/admin/invoices', requireAdminAuth, async (req, res) => {
       if (!item.description || !item.description.trim()) {
         return res.status(400).json({ success: false, message: 'Item description is required.' });
       }
-      if (Number(item.rate) <= 0) {
-        return res.status(400).json({ success: false, message: 'Item rate must be greater than zero.' });
+      if (Number(item.rate) <= 0 && Number(body.projectCost) <= 0) {
+        return res.status(400).json({ success: false, message: 'Item rate or Project Cost must be greater than zero.' });
       }
     }
     const created = await createInvoice(body);
@@ -543,8 +543,8 @@ app.put('/api/admin/invoices/:invoiceNo', requireAdminAuth, async (req, res) => 
       if (!item.description || !String(item.description).trim()) {
         return res.status(400).json({ success: false, message: 'Item description is required for all lines.' });
       }
-      if (Number(item.rate) <= 0) {
-        return res.status(400).json({ success: false, message: 'Item rate must be greater than zero.' });
+      if (Number(item.rate) <= 0 && Number(body.projectCost) <= 0) {
+        return res.status(400).json({ success: false, message: 'Item rate or Project Cost must be greater than zero.' });
       }
     }
     const updated = await updateInvoice(req.params.invoiceNo, body);

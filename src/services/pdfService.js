@@ -157,7 +157,11 @@ async function buildInvoiceHtml(invoice, company, baseUrl = 'https://yogteck.com
   // Items rows
   const items = Array.isArray(invoice.items) ? invoice.items : [];
   let totalQty = 0;
-  items.forEach(it => { totalQty += (Number(it.qty) || 0); });
+  let itemsSum = 0;
+  items.forEach(it => {
+    totalQty += (Number(it.qty) || 0);
+    itemsSum += (Number(it.lineTotal) || ((Number(it.qty) || 1) * (Number(it.rate) || 0)));
+  });
 
   // Keep filler rows compact so that Important Notes fits cleanly
   const minRows = 3;
@@ -920,7 +924,7 @@ async function buildInvoiceHtml(invoice, company, baseUrl = 'https://yogteck.com
       <!-- Total Row -->
       <tr class="total-row">
         <td colspan="4" class="text-right" style="font-weight: 800;">Total Amount</td>
-        <td colspan="2" class="text-right"><strong>${formatINR(invoice.grandTotal)}</strong></td>
+        <td colspan="2" class="text-right"><strong>${formatINR(itemsSum || invoice.grandTotal)}</strong></td>
       </tr>
     </tbody>
   </table>
@@ -1020,29 +1024,6 @@ async function buildInvoiceHtml(invoice, company, baseUrl = 'https://yogteck.com
             <div style="font-size: 8.5px; color: #64748b; font-style: italic; margin-bottom: 3px;">
               ${invoice.status === 'Paid' ? `Full Payment Recorded on ${formatDisplayDate(invoice.paymentDate || invoice.invoiceDate)}.` : 'No payments recorded yet.'}
             </div>
-          `}
-            <table class="payments-mini-table">
-              <thead>
-                <tr>
-                  <th>Sr</th>
-                  <th>Date</th>
-                  <th>Mode</th>
-                  <th>Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${invoice.payments.map((p, pIdx) => `
-                  <tr>
-                    <td class="text-center">${pIdx + 1}</td>
-                    <td class="text-center">${p.paymentDate}</td>
-                    <td class="text-center">${p.mode || 'UPI'}</td>
-                    <td class="text-right"><strong>${formatINR(p.amountPaid)}</strong></td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          ` : `
-            <div style="font-size: 8.5px; color: #64748b; font-style: italic; margin-bottom: 3px;">No payments recorded yet.</div>
           `}
 
           <div class="payment-summary-line">

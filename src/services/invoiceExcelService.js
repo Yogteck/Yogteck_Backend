@@ -157,6 +157,25 @@ function objectToRowArray(sheetName, obj) {
   });
 }
 
+// Convert ExcelJS row or values array to object matching schema
+function rowToObject(sheetName, rowOrValues) {
+  const columns = SCHEMAS[sheetName];
+  const item = {};
+  if (!rowOrValues) return item;
+
+  if (typeof rowOrValues.getCell === 'function') {
+    columns.forEach((col, idx) => {
+      item[col.key] = desanitize(rowOrValues.getCell(idx + 1).value);
+    });
+  } else if (Array.isArray(rowOrValues)) {
+    const offset = rowOrValues.length > columns.length ? 1 : 0;
+    columns.forEach((col, idx) => {
+      item[col.key] = desanitize(rowOrValues[idx + offset]);
+    });
+  }
+  return item;
+}
+
 async function loadWorkbook() {
   const workbook = new ExcelJS.Workbook();
   if (fs.existsSync(CLIENTS_MASTER_PATH)) {
@@ -363,11 +382,15 @@ async function getAllInvoices() {
     const totalPaidPaise = invPayments.reduce((sum, p) => sum + toPaise(p.amountPaid), 0);
     const balanceDuePaise = Math.max(0, grandTotalPaise - totalPaidPaise);
 
-    let status = 'Unpaid';
-    if (totalPaidPaise >= grandTotalPaise && grandTotalPaise > 0) {
-      status = 'Paid';
-    } else if (totalPaidPaise > 0) {
-      status = 'Partially Paid';
+    let status = inv.status;
+    if (!status || status === 'Unpaid') {
+      if (totalPaidPaise >= grandTotalPaise && grandTotalPaise > 0) {
+        status = 'Paid';
+      } else if (totalPaidPaise > 0) {
+        status = 'Partially Paid';
+      } else {
+        status = 'Unpaid';
+      }
     }
 
     const client = clientMap.get(inv.clientId) || null;
@@ -654,7 +677,7 @@ async function updateInvoice(invoiceNo, invoiceData) {
       const rowNo = row.getCell(1).value;
       if (String(rowNo).trim() === String(invoiceNo).trim()) {
         targetRowNumber = rowNumber;
-        existingInvoice = rowToObject('Invoices', row.values);
+        existingInvoice = rowToObject('Invoices', row);
       }
     });
 
@@ -821,11 +844,13 @@ async function updateInvoice(invoiceNo, invoiceData) {
 
     await workbook.xlsx.writeFile(CLIENTS_MASTER_PATH);
 
-    return {
+    const refreshed = await getInvoiceByNo(invoiceNo);
+    return refreshed || {
       ...updatedInvoiceRow,
       items: processedItems,
       totalPaid,
-      balanceDue
+      balanceDue,
+      status
     };
   });
 }
