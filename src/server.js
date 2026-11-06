@@ -12,6 +12,31 @@ const {
   existsExcelFile
 } = require('./services/excelService');
 
+const {
+  getCompanyMaster,
+  updateCompanyMaster,
+  ensureCompanyMasterInitialized
+} = require('./services/companyExcelService');
+
+const {
+  ensureClientsMasterInitialized,
+  getAllClients,
+  getClientById,
+  saveClient,
+  getAllInvoices,
+  getInvoiceByNo,
+  getInvoiceByToken,
+  createInvoice,
+  addPayment,
+  getPaymentsForInvoice,
+  generateNextInvoiceNo
+} = require('./services/invoiceExcelService');
+
+const {
+  generateInvoicePdfBuffer,
+  buildInvoiceHtml
+} = require('./services/pdfService');
+
 const app = express();
 const port = Number(process.env.PORT || 5000);
 const enquiryRecipient = process.env.MAIL_TO || 'yogteck@gmail.com';
@@ -358,6 +383,198 @@ app.get('/api/admin/enquiries', requireAdminAuth, async (req, res) => {
       message: 'Failed to retrieve enquiries data.',
       error: err.message
     });
+  }
+});
+
+// ----------------------------------------------------------------------
+// COMPANY MASTER APIS (Protected)
+// ----------------------------------------------------------------------
+app.get('/api/admin/company', requireAdminAuth, async (req, res) => {
+  try {
+    const company = await getCompanyMaster();
+    res.json({ success: true, company });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.put('/api/admin/company', requireAdminAuth, async (req, res) => {
+  try {
+    const updated = await updateCompanyMaster(req.body || {});
+    res.json({ success: true, message: 'Company details updated successfully.', company: updated });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ----------------------------------------------------------------------
+// CLIENTS MASTER APIS (Protected)
+// ----------------------------------------------------------------------
+app.get('/api/admin/clients', requireAdminAuth, async (req, res) => {
+  try {
+    const clients = await getAllClients();
+    res.json({ success: true, count: clients.length, clients });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/admin/clients', requireAdminAuth, async (req, res) => {
+  try {
+    const { clientName, mobile, email } = req.body || {};
+    if (!clientName || !clientName.trim()) {
+      return res.status(400).json({ success: false, message: 'Client name is required.' });
+    }
+    if (mobile && !/^\d{10}$/.test(mobile.replace(/[^0-9]/g, ''))) {
+      return res.status(400).json({ success: false, message: 'Mobile must be a valid 10-digit number.' });
+    }
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ success: false, message: 'Please provide a valid email.' });
+    }
+    const saved = await saveClient(req.body);
+    res.json({ success: true, message: 'Client saved successfully.', client: saved });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ----------------------------------------------------------------------
+// INVOICES & PAYMENTS APIS (Protected)
+// ----------------------------------------------------------------------
+app.get('/api/admin/invoices', requireAdminAuth, async (req, res) => {
+  try {
+    const invoices = await getAllInvoices();
+    invoices.sort((a, b) => b.invoiceNo.localeCompare(a.invoiceNo));
+    res.json({ success: true, count: invoices.length, invoices });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.get('/api/admin/invoices/next-number', requireAdminAuth, async (req, res) => {
+  try {
+    const nextNo = await generateNextInvoiceNo();
+    res.json({ success: true, nextInvoiceNo: nextNo });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.get('/api/admin/invoices/:invoiceNo', requireAdminAuth, async (req, res) => {
+  try {
+    const invoice = await getInvoiceByNo(req.params.invoiceNo);
+    if (!invoice) {
+      return res.status(404).json({ success: false, message: 'Invoice not found.' });
+    }
+    const company = await getCompanyMaster();
+    res.json({ success: true, invoice, company });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/admin/invoices', requireAdminAuth, async (req, res) => {
+  try {
+    const body = req.body || {};
+    if (!body.clientId) {
+      return res.status(400).json({ success: false, message: 'Client is required.' });
+    }
+    if (!Array.isArray(body.items) || body.items.length === 0) {
+      return res.status(400).json({ success: false, message: 'At least one item line is required.' });
+    }
+    for (const item of body.items) {
+      if (!item.description || !item.description.trim()) {
+        return res.status(400).json({ success: false, message: 'Item description is required.' });
+      }
+      if (Number(item.rate) <= 0) {
+        return res.status(400).json({ success: false, message: 'Item rate must be greater than zero.' });
+      }
+    }
+    const created = await createInvoice(body);
+    res.json({ success: true, message: 'Invoice created successfully.', invoice: created });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/admin/invoices/:invoiceNo/payments', requireAdminAuth, async (req, res) => {
+  try {
+    const result = await addPayment(req.params.invoiceNo, req.body || {});
+    res.json({ success: true, message: 'Payment recorded successfully.', ...result });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+});
+
+// Download PDF Endpoint
+app.get('/api/admin/invoices/:invoiceNo/pdf', requireAdminAuth, async (req, res) => {
+  try {
+    const invoice = await getInvoiceByNo(req.params.invoiceNo);
+    if (!invoice) {
+      return res.status(404).json({ success: false, message: 'Invoice not found.' });
+    }
+    const company = await getCompanyMaster();
+    const origin = req.get('origin') || process.env.FRONTEND_ORIGIN || 'https://yogteck.com';
+    const pdfBuffer = await generateInvoicePdfBuffer(invoice, company, origin);
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="${invoice.invoiceNo}.pdf"`,
+      'Content-Length': pdfBuffer.length
+    });
+    res.send(pdfBuffer);
+  } catch (err) {
+    console.error('PDF Generation Error:', err);
+    res.status(500).json({ success: false, message: 'Failed to generate PDF: ' + err.message });
+  }
+});
+
+// ----------------------------------------------------------------------
+// PUBLIC INVOICE VIEW API (QR Code link, Read-Only, No sensitive data)
+// ----------------------------------------------------------------------
+app.get('/api/public/invoice/:token', async (req, res) => {
+  try {
+    const invoice = await getInvoiceByToken(req.params.token);
+    if (!invoice) {
+      return res.status(404).json({ success: false, message: 'Invoice not found or link has expired.' });
+    }
+    const company = await getCompanyMaster();
+
+    const maskedClient = invoice.client ? {
+      clientName: invoice.client.clientName,
+      state: invoice.client.state
+    } : null;
+
+    res.json({
+      success: true,
+      invoice: {
+        invoiceNo: invoice.invoiceNo,
+        invoiceDate: invoice.invoiceDate,
+        dueDate: invoice.dueDate,
+        grandTotal: invoice.grandTotal,
+        totalPaid: invoice.totalPaid,
+        balanceDue: invoice.balanceDue,
+        status: invoice.status,
+        planName: invoice.planName,
+        serviceStartDate: invoice.serviceStartDate,
+        serviceExpiryDate: invoice.serviceExpiryDate,
+        renewalDueDate: invoice.renewalDueDate,
+        client: maskedClient,
+        payments: invoice.payments || []
+      },
+      company: {
+        companyName: company.companyName,
+        contact: company.contact,
+        email: company.email,
+        bankName: company.bankName,
+        accountNo: company.accountNo,
+        ifsc: company.ifsc,
+        upiId: company.upiId,
+        importantNotes: company.importantNotes
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
 });
 
