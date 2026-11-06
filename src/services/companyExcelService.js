@@ -41,10 +41,10 @@ const DEFAULT_COMPANY_DATA = {
   branch: 'Kanpur',
   accountNo: '731410110007057',
   ifsc: 'BKID0007336',
-  upiId: '8299209905@upi',
+  upiId: 'vikas915150@ybl',
   logoPath: 'assets/logo/yogteck-logo.webp',
   tagline: 'Websites, Custom Software, Mobile Apps & Complete Digital Solutions',
-  terms: '1. Payment due within 7 days of invoice date.\n2. Goods or Services once rendered will not be refunded.\n3. All disputes subject to Kanpur Jurisdiction.',
+  terms: '1. No Cheque or Cash accepted. Only UPI or Net Banking allowed.\n2. Payment due within 7 days of invoice date.\n3. Goods or Services once rendered will not be refunded.\n4. All disputes subject to Kanpur Jurisdiction.',
   gstEnabled: 'No',
   importantNotes: DEFAULT_IMPORTANT_NOTES
 };

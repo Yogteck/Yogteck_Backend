@@ -140,8 +140,9 @@ async function buildInvoiceHtml(invoice, company, baseUrl = 'https://yogteck.com
 
   // 2. UPI QR (optional upi://pay URI)
   let upiQrUrl = '';
-  if (company.upiId && invoice.balanceDue > 0) {
-    const upiUri = `upi://pay?pa=${encodeURIComponent(company.upiId)}&pn=${encodeURIComponent(company.companyName)}&am=${encodeURIComponent(invoice.balanceDue.toFixed(2))}&cu=INR&tn=${encodeURIComponent(invoice.invoiceNo)}`;
+  const effectiveUpiId = company.upiId || 'vikas915150@ybl';
+  if (effectiveUpiId && invoice.balanceDue > 0) {
+    const upiUri = `upi://pay?pa=${encodeURIComponent(effectiveUpiId)}&pn=${encodeURIComponent(company.companyName || 'YOGTECK')}&am=${encodeURIComponent(invoice.balanceDue.toFixed(2))}&cu=INR&tn=${encodeURIComponent(invoice.invoiceNo)}`;
     upiQrUrl = await generateQRCodeDataUrl(upiUri);
   }
 
@@ -944,7 +945,10 @@ async function buildInvoiceHtml(invoice, company, baseUrl = 'https://yogteck.com
               <div class="bank-row"><span class="bank-lbl">Branch</span> <span class="bank-val">${company.branch || 'Kanpur'}</span></div>
               <div class="bank-row"><span class="bank-lbl">Acc. Number</span> <span class="bank-val">${company.accountNo || '731410110007057'}</span></div>
               <div class="bank-row"><span class="bank-lbl">IFSC</span> <span class="bank-val">${company.ifsc || 'BKID0007336'}</span></div>
-              ${company.upiId ? `<div class="bank-row"><span class="bank-lbl">UPI ID</span> <span class="bank-val">${company.upiId}</span></div>` : ''}
+              <div class="bank-row"><span class="bank-lbl">UPI ID</span> <span class="bank-val">${company.upiId || 'vikas915150@ybl'}</span></div>
+              <div style="margin-top: 4px; font-size: 7.5px; font-weight: 800; color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca; padding: 2px 4px; border-radius: 3px;">
+                🚫 No Cheque or Cash accepted &bull; Only UPI or Net Banking allowed
+              </div>
             </td>
             <td class="qr-cell">
               ${paymentQrBase64 ? `<img src="${paymentQrBase64}" class="qr-img" style="width: 78px; height: 78px; object-fit: contain;" alt="UPI QR">` : (balanceQrUrl ? `<img src="${balanceQrUrl}" class="qr-img" alt="QR Code">` : '')}
