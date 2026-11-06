@@ -550,6 +550,17 @@ async function createInvoice(invoiceData) {
       };
     });
 
+    const initialPaid = Number(invoiceData.amountPaid != null ? invoiceData.amountPaid : invoiceData.totalPaid) || 0;
+    const initialPaidPaise = toPaise(initialPaid);
+    const balanceDuePaise = Math.max(0, grandTotalPaise - initialPaidPaise);
+
+    let status = invoiceData.status;
+    if (!status) {
+      if (balanceDuePaise === 0 && grandTotalPaise > 0) status = 'Paid';
+      else if (initialPaidPaise > 0) status = 'Partially Paid';
+      else status = 'Unpaid';
+    }
+
     const invoiceRow = {
       invoiceNo,
       clientId: sanitize(invoiceData.clientId || ''),
@@ -558,7 +569,7 @@ async function createInvoice(invoiceData) {
       taxableTotal: roundToTwo(fromPaise(taxableTotalPaise)),
       taxTotal: roundToTwo(fromPaise(taxTotalPaise)),
       grandTotal: roundToTwo(fromPaise(grandTotalPaise)),
-      status: 'Unpaid',
+      status: sanitize(status),
       publicToken,
       notes: sanitize(invoiceData.notes || ''),
       challanNo: sanitize(invoiceData.challanNo || ''),
@@ -578,13 +589,27 @@ async function createInvoice(invoiceData) {
       itemsSheet.addRow(objectToRowArray('InvoiceItems', item));
     });
 
+    if (initialPaidPaise > 0) {
+      const paymentsSheet = workbook.getWorksheet('Payments');
+      const paymentId = `YT-PAY-${Date.now().toString().slice(-6)}`;
+      const paymentRow = {
+        paymentId,
+        invoiceNo,
+        amountPaid: roundToTwo(fromPaise(initialPaidPaise)),
+        paymentDate: invoiceData.paymentDate || invoiceData.invoiceDate || new Date().toISOString().slice(0, 10),
+        mode: sanitize(invoiceData.paymentMode || 'UPI'),
+        note: sanitize(invoiceData.paymentNote || 'Initial Payment')
+      };
+      paymentsSheet.addRow(objectToRowArray('Payments', paymentRow));
+    }
+
     await workbook.xlsx.writeFile(CLIENTS_MASTER_PATH);
 
     return {
       ...invoiceRow,
       items: processedItems,
-      totalPaid: 0,
-      balanceDue: invoiceRow.grandTotal
+      totalPaid: roundToTwo(fromPaise(initialPaidPaise)),
+      balanceDue: roundToTwo(fromPaise(balanceDuePaise))
     };
   });
 }
@@ -659,15 +684,49 @@ async function updateInvoice(invoiceNo, invoiceData) {
       }
     });
 
+    if (invoiceData.amountPaid !== undefined) {
+      const explicitPaidPaise = toPaise(invoiceData.amountPaid);
+      if (explicitPaidPaise !== totalPaidPaise) {
+        const pymtRowsToDelete = [];
+        paymentsSheet.eachRow((row, rowNumber) => {
+          if (rowNumber === 1) return;
+          const rowInvNo = row.getCell(2).value;
+          if (String(rowInvNo).trim() === String(invoiceNo).trim()) {
+            pymtRowsToDelete.push(rowNumber);
+          }
+        });
+        for (let i = pymtRowsToDelete.length - 1; i >= 0; i--) {
+          paymentsSheet.spliceRows(pymtRowsToDelete[i], 1);
+        }
+        totalPaidPaise = explicitPaidPaise;
+        if (explicitPaidPaise > 0) {
+          const paymentId = `YT-PAY-${Date.now().toString().slice(-6)}`;
+          const paymentRow = {
+            paymentId,
+            invoiceNo,
+            amountPaid: roundToTwo(fromPaise(explicitPaidPaise)),
+            paymentDate: invoiceData.paymentDate || invoiceData.invoiceDate || new Date().toISOString().slice(0, 10),
+            mode: sanitize(invoiceData.paymentMode || 'UPI'),
+            note: sanitize(invoiceData.paymentNote || 'Updated Payment')
+          };
+          paymentsSheet.addRow(objectToRowArray('Payments', paymentRow));
+        }
+      }
+    }
+
     const grandTotal = roundToTwo(fromPaise(grandTotalPaise));
     const totalPaid = roundToTwo(fromPaise(totalPaidPaise));
     const balanceDue = Math.max(0, roundToTwo(fromPaise(grandTotalPaise - totalPaidPaise)));
 
-    let status = 'Unpaid';
-    if (balanceDue === 0 && grandTotal > 0) {
-      status = 'Paid';
-    } else if (totalPaid > 0 && balanceDue > 0) {
-      status = 'Partially Paid';
+    let status = invoiceData.status;
+    if (!status) {
+      if (balanceDue === 0 && grandTotal > 0) {
+        status = 'Paid';
+      } else if (totalPaid > 0 && balanceDue > 0) {
+        status = 'Partially Paid';
+      } else {
+        status = 'Unpaid';
+      }
     }
 
     const updatedInvoiceRow = {
@@ -678,7 +737,7 @@ async function updateInvoice(invoiceNo, invoiceData) {
       taxableTotal: roundToTwo(fromPaise(taxableTotalPaise)),
       taxTotal: roundToTwo(fromPaise(taxTotalPaise)),
       grandTotal,
-      status,
+      status: sanitize(status),
       publicToken: existingInvoice.publicToken || crypto.randomBytes(16).toString('hex'),
       notes: sanitize(invoiceData.notes !== undefined ? invoiceData.notes : (existingInvoice.notes || '')),
       challanNo: sanitize(invoiceData.challanNo !== undefined ? invoiceData.challanNo : (existingInvoice.challanNo || '')),

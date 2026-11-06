@@ -972,9 +972,17 @@ async function buildInvoiceHtml(invoice, company, baseUrl = 'https://yogteck.com
       <!-- Right Cell: Calculations, Payments Received, Signatory -->
       <td class="bottom-right-cell">
         <table class="calc-table">
+          <tr>
+            <td class="calc-label">Project Cost / Total Amount</td>
+            <td class="calc-val">${formatINR(invoice.grandTotal)}</td>
+          </tr>
+          <tr>
+            <td class="calc-label">Amount Paid / Received</td>
+            <td class="calc-val" style="color: #15803d;">${formatINR(invoice.totalPaid || 0)}</td>
+          </tr>
           <tr class="total-amt-row">
-            <td class="calc-label" style="font-size: 11px;">Total Amount</td>
-            <td class="calc-val" style="font-size: 12.5px;">${formatINR(invoice.grandTotal)}</td>
+            <td class="calc-label" style="font-size: 11px; color: #dc2626; font-weight: 800;">Balance Due (बकाया राशि)</td>
+            <td class="calc-val" style="font-size: 12.5px; color: #dc2626; font-weight: 900;">${formatINR(invoice.balanceDue != null ? invoice.balanceDue : 0)}</td>
           </tr>
         </table>
 
@@ -1094,7 +1102,7 @@ async function buildInvoiceHtml(invoice, company, baseUrl = 'https://yogteck.com
         <div class="note-hi">
           प्रोजेक्ट से जुड़ी सभी बाहरी (External) फाइलें, सेवाएँ और संसाधन क्लाइंट/पार्टी को ही उपलब्ध कराने होंगे। उदाहरण के लिए:<br>
           &bull; पेमेंट गेटवे (Payment Gateway) का अकाउंट/क्रेडेंशियल्स क्लाइंट द्वारा उपलब्ध कराया जाएगा।<br>
-          &bull; प्रोजेक्ट से जुड़ी क्लाइंट की अपनी फाइलें, जैसे CAD ड्रॉइंग्स, लोगो, कंटेंट, फोटो और अन्य दस्तावेज़ (जैसे MMR Constructions के प्रोजेक्ट में उनकी CAD फाइलें) क्लाइंट को ही देनी होंगी।<br>
+          &bull; प्रोजेक्ट से जुड़ी क्लाइंट की अपनी फाइलें, जैसे लोगो, कंटेंट, फोटो, ड्रॉइंग्स और अन्य दस्तावेज़ क्लाइंट को ही देने होंगे।<br>
           इन सामग्रियों के अभाव या देरी से होने वाली किसी भी बाधा या विलंब की ज़िम्मेदारी कंपनी की नहीं होगी।
         </div>
         <div class="note-en">

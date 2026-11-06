@@ -22,7 +22,7 @@ Scan the QR code on this invoice to view your full invoice, active plan details,
 3) क्लाइंट द्वारा उपलब्ध कराई जाने वाली सामग्री / Materials & External Resources to be Provided by Client
 प्रोजेक्ट से जुड़ी सभी बाहरी (External) फाइलें, सेवाएँ और संसाधन क्लाइंट/पार्टी को ही उपलब्ध कराने होंगे। उदाहरण के लिए:
 • पेमेंट गेटवे (Payment Gateway) का अकाउंट/क्रेडेंशइल्स क्लाइंट द्वारा उपलब्ध कराया जाएगा।
-• प्रोजेक्ट से जुड़ी क्लाइंट की अपनी फाइलें, जैसे CAD ड्रॉइंग्स, लोगो, कंटेंट, फोटो और अन्य दस्तावेज़ (जैसे MMR Constructions के प्रोजेक्ट में उनकी CAD फाइलें) क्लाइंट को ही देनी होंगी।
+• प्रोजेक्ट से जुड़ी क्लाइंट की अपनी फाइलें, जैसे लोगो, कंटेंट, फोटो, ड्रॉइंग्स और अन्य दस्तावेज़ क्लाइंट को ही देने होंगे।
 इन सामग्रियों के अभाव या देरी से होने वाली किसी भी बाधा या विलंब की ज़िम्मेदारी कंपनी की नहीं होगी।
 All external files, accounts, and resources required for the project (e.g. payment gateway credentials, CAD files, logo, content, photos) must be provided by the client; the company cannot be held responsible for delays arising from their absence.`;
 
