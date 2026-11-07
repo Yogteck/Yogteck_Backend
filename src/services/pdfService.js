@@ -885,16 +885,15 @@ async function buildInvoiceHtml(invoice, company, baseUrl = 'https://yogteck.com
     </tr>
   </table>
 
-  <!-- 4. Items Table (No HSN, No Tax; With Payment Date) -->
+  <!-- 4. Items Table (No HSN, No Tax, No Qty/Unit; With Payment Date & Ref No / Payment Proof) -->
   <table class="items-table">
     <thead>
       <tr>
         <th style="width: 6%;">Sr.<br>No.</th>
         <th style="width: 44%;">Name of Product / Service</th>
         <th style="width: 16%;">Payment Date</th>
-        <th style="width: 10%;">Qty</th>
-        <th style="width: 12%;">Rate</th>
-        <th style="width: 12%;">Total</th>
+        <th style="width: 20%;">Ref. No. / Payment Proof</th>
+        <th style="width: 14%;" class="text-right">Amount</th>
       </tr>
     </thead>
     <tbody>
@@ -903,9 +902,8 @@ async function buildInvoiceHtml(invoice, company, baseUrl = 'https://yogteck.com
           <td class="text-center">${idx + 1}</td>
           <td class="text-left"><strong>${item.description}</strong></td>
           <td class="text-center">${formatDisplayDate(item.paymentDate || invoice.paymentDate || invoice.invoiceDate)}</td>
-          <td class="text-center">${item.qty} ${item.unit || 'NOS'}</td>
-          <td class="text-right">${formatINR(item.rate)}</td>
-          <td class="text-right"><strong>${formatINR(item.lineTotal || (item.qty * item.rate))}</strong></td>
+          <td class="text-center" style="font-family: monospace; font-size: 8.5px; font-weight: 600;">${item.refNo || '-'}</td>
+          <td class="text-right"><strong>${formatINR(item.lineTotal || item.rate)}</strong></td>
         </tr>
       `).join('')}
 
@@ -917,14 +915,13 @@ async function buildInvoiceHtml(invoice, company, baseUrl = 'https://yogteck.com
           <td>&nbsp;</td>
           <td>&nbsp;</td>
           <td>&nbsp;</td>
-          <td>&nbsp;</td>
         </tr>
       `).join('')}
 
       <!-- Total Row -->
       <tr class="total-row">
         <td colspan="4" class="text-right" style="font-weight: 800;">Total Amount</td>
-        <td colspan="2" class="text-right"><strong>${formatINR(itemsSum || invoice.grandTotal)}</strong></td>
+        <td class="text-right"><strong>${formatINR(itemsSum || invoice.grandTotal)}</strong></td>
       </tr>
     </tbody>
   </table>
