@@ -1157,7 +1157,7 @@ async function buildInvoiceHtml(invoice, company, baseUrl = 'https://yogteck.com
           इन सामग्रियों के अभाव या देरी से होने वाली किसी भी बाधा या विलंब की ज़िम्मेदारी कंपनी की नहीं होगी।
         </div>
         <div class="note-en">
-          All external files, accounts, and resources required for the project (e.g. payment gateway credentials, CAD files, logo, content, photos) must be provided by the client; the company cannot be held responsible for delays or disruptions arising from their absence.
+          All external files, accounts, and resources required for the project (e.g. payment gateway credentials, logo, content, photos) must be provided by the client; the company cannot be held responsible for delays or disruptions arising from their absence.
         </div>
       </div>
 

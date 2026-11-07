@@ -24,7 +24,7 @@ Scan the QR code on this invoice to view your full invoice, active plan details,
 • पेमेंट गेटवे (Payment Gateway) का अकाउंट/क्रेडेंशइल्स क्लाइंट द्वारा उपलब्ध कराया जाएगा।
 • प्रोजेक्ट से जुड़ी क्लाइंट की अपनी फाइलें, जैसे लोगो, कंटेंट, फोटो, ड्रॉइंग्स और अन्य दस्तावेज़ क्लाइंट को ही देने होंगे।
 इन सामग्रियों के अभाव या देरी से होने वाली किसी भी बाधा या विलंब की ज़िम्मेदारी कंपनी की नहीं होगी।
-All external files, accounts, and resources required for the project (e.g. payment gateway credentials, CAD files, logo, content, photos) must be provided by the client; the company cannot be held responsible for delays arising from their absence.`;
+All external files, accounts, and resources required for the project (e.g. payment gateway credentials, logo, content, photos) must be provided by the client; the company cannot be held responsible for delays arising from their absence.`;
 
 const DEFAULT_COMPANY_DATA = {
   companyName: 'YOGTECK Business Solutions',
