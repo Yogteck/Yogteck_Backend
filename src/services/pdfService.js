@@ -104,6 +104,25 @@ function getPaymentQrBase64() {
   return null;
 }
 
+// Cleanly format multi-line payment reference numbers (e.g. UPI Ref & UPI ID)
+function formatRefLines(raw) {
+  if (!raw) return [];
+  let text = String(raw).trim();
+  if (!text) return [];
+  text = text.replace(/\s*:\s*/g, ': ');
+  if (/UPI\s*ID:/i.test(text) && /UPI\s*Ref:/i.test(text)) {
+    const parts = text.split(/(?=UPI\s*ID:)/i);
+    return parts.map(p => p.trim()).filter(Boolean);
+  }
+  if (text.includes('\n')) {
+    return text.split('\n').map(p => p.trim()).filter(Boolean);
+  }
+  if (text.includes(';') || text.includes('|')) {
+    return text.split(/[;|]/).map(p => p.trim()).filter(Boolean);
+  }
+  return [text];
+}
+
 // Generate QR Code Data URL
 async function generateQRCodeDataUrl(text) {
   try {
@@ -430,8 +449,31 @@ async function buildInvoiceHtml(invoice, company, baseUrl = 'https://yogteck.com
   .items-table td {
     border-left: 1px solid #000000;
     border-right: 1px solid #000000;
-    padding: 4px 6px;
-    vertical-align: top;
+    padding: 5px 6px;
+    vertical-align: middle;
+  }
+
+  .ref-badge {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 8px;
+    line-height: 1.35;
+    background: #f8fafc;
+    color: #0f172a;
+    padding: 3px 6px;
+    border-radius: 4px;
+    border: 1px solid #cbd5e1;
+    font-weight: 600;
+    display: inline-block;
+    max-width: 100%;
+    box-sizing: border-box;
+    text-align: center;
+    word-break: break-word;
+  }
+
+  .ref-line {
+    display: block;
+    white-space: nowrap;
+    line-height: 1.35;
   }
 
   .items-table .row-item {
@@ -914,11 +956,11 @@ async function buildInvoiceHtml(invoice, company, baseUrl = 'https://yogteck.com
   <table class="items-table">
     <thead>
       <tr>
-        <th style="width: 6%;">Sr.<br>No.</th>
-        <th style="width: 44%;">Name of Product / Service</th>
-        <th style="width: 16%;">Payment Date</th>
-        <th style="width: 20%;">Ref. No. / Payment Proof</th>
-        <th style="width: 14%;" class="text-right">Amount</th>
+        <th style="width: 5%;">Sr.<br>No.</th>
+        <th style="width: 36%;">Name of Product / Service</th>
+        <th style="width: 14%;">Payment Date</th>
+        <th style="width: 27%;">Ref. No. / Payment Proof</th>
+        <th style="width: 18%;" class="text-right">Amount</th>
       </tr>
     </thead>
     <tbody>
@@ -927,7 +969,13 @@ async function buildInvoiceHtml(invoice, company, baseUrl = 'https://yogteck.com
           <td class="text-center">${idx + 1}</td>
           <td class="text-left"><strong>${item.description}</strong></td>
           <td class="text-center">${formatDisplayDate(item.paymentDate || invoice.paymentDate || invoice.invoiceDate)}</td>
-          <td class="text-center" style="font-family: monospace; font-size: 8.5px; font-weight: 600;">${item.refNo || '-'}</td>
+          <td class="text-center">
+            ${item.refNo ? `
+              <div class="ref-badge">
+                ${formatRefLines(item.refNo).map(l => `<span class="ref-line">${l}</span>`).join('')}
+              </div>
+            ` : '<span style="color: #94a3b8;">-</span>'}
+          </td>
           <td class="text-right"><strong>${formatINR(item.lineTotal || item.rate)}</strong></td>
         </tr>
       `).join('')}
