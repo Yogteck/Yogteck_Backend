@@ -1,6 +1,5 @@
 const fs = require('fs');
 const path = require('path');
-const puppeteer = require('puppeteer-core');
 const QRCode = require('qrcode');
 const { numberToWords } = require('./numberToWords');
 
@@ -1183,6 +1182,9 @@ async function generateInvoicePdfBuffer(invoice, company, baseUrl) {
   if (!browserPath) {
     throw new Error('No compatible Chrome or Edge executable found on the system for PDF generation.');
   }
+
+  const puppeteerModule = await import('puppeteer-core');
+  const puppeteer = puppeteerModule.default || puppeteerModule;
 
   const html = await buildInvoiceHtml(invoice, company, baseUrl);
 
