@@ -290,7 +290,7 @@ async function ensureClientsMasterInitialized() {
     status: 'Partially Paid',
     publicToken: 'yt_tok_mmr_live_invoice_2026',
     notes: sanitize('No Cheque or Cash accepted. Only UPI or Net Banking allowed.'),
-    challanNo: sanitize('33'),
+    challanNo: sanitize('CLG-AXS-116745'),
     challanDate: '2026-11-06',
     ewayBillNo: sanitize('78456378'),
     transport: sanitize('Transporter'),
@@ -308,7 +308,7 @@ async function ensureClientsMasterInitialized() {
       srNo: 1,
       description: sanitize('Web Application & Cloud Software Development'),
       paymentDate: '2026-11-06',
-      refNo: sanitize('UPI/6311094012'),
+      refNo: sanitize('UPI Ref : 374580831454\nUPI ID : 7071951011@ybl'),
       hsnSac: '',
       qty: 1,
       unit: sanitize('NOS'),
@@ -323,7 +323,7 @@ async function ensureClientsMasterInitialized() {
       srNo: 2,
       description: sanitize('Distributed Ledger Technology'),
       paymentDate: '2026-11-06',
-      refNo: sanitize('UPI/6311459021'),
+      refNo: sanitize('UPI Ref : 704938145541\nUPI ID : 7071951011@ybl'),
       hsnSac: '',
       qty: 1,
       unit: sanitize('NOS'),
@@ -338,7 +338,7 @@ async function ensureClientsMasterInitialized() {
       srNo: 3,
       description: sanitize('Services Charge'),
       paymentDate: '2026-11-06',
-      refNo: sanitize('UPI/6311500334'),
+      refNo: sanitize('UPI Ref : 287289156857\nUPI ID : 7071951011-2@axl'),
       qty: 1,
       unit: sanitize('NOS'),
       rate: 5000,
@@ -357,7 +357,7 @@ async function ensureClientsMasterInitialized() {
       amountPaid: 40000,
       paymentDate: '2026-11-06',
       mode: sanitize('UPI'),
-      note: sanitize('Part 1: Web Application & Cloud Software Development')
+      note: sanitize('Part 1: Web Application & Cloud Software Development [UPI Ref : 374580831454]')
     },
     {
       paymentId: 'YT-PAY-002',
@@ -365,7 +365,7 @@ async function ensureClientsMasterInitialized() {
       amountPaid: 45000,
       paymentDate: '2026-11-06',
       mode: sanitize('UPI'),
-      note: sanitize('Part 2: Distributed Ledger Technology')
+      note: sanitize('Part 2: Distributed Ledger Technology [UPI Ref : 704938145541]')
     },
     {
       paymentId: 'YT-PAY-003',
@@ -373,7 +373,7 @@ async function ensureClientsMasterInitialized() {
       amountPaid: 5000,
       paymentDate: '2026-11-06',
       mode: sanitize('UPI'),
-      note: sanitize('Part 3: Services Charge')
+      note: sanitize('Part 3: Services Charge [UPI Ref : 287289156857]')
     }
   ];
   payments.forEach(p => paymentsSheet.addRow(objectToRowArray('Payments', p)));
