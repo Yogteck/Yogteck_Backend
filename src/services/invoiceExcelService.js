@@ -119,6 +119,7 @@ const SCHEMAS = {
     { header: 'Invoice No', key: 'invoiceNo', width: 22 },
     { header: 'Sr No', key: 'srNo', width: 10 },
     { header: 'Description', key: 'description', width: 40 },
+    { header: 'Payment Date', key: 'paymentDate', width: 14 },
     { header: 'HSN/SAC', key: 'hsnSac', width: 14 },
     { header: 'Qty', key: 'qty', width: 10 },
     { header: 'Unit', key: 'unit', width: 10 },
@@ -257,21 +258,122 @@ async function ensureClientsMasterInitialized() {
     formatHeader(sheet);
   }
 
-  // Seed Initial Sample Client if newly created
+  // Seed Initial Client & Invoice if newly created
   const clientsSheet = workbook.getWorksheet('Clients');
-  const sampleClient = {
+  const invoicesSheet = workbook.getWorksheet('Invoices');
+  const itemsSheet = workbook.getWorksheet('InvoiceItems');
+  const paymentsSheet = workbook.getWorksheet('Payments');
+
+  const mmrClient = {
     clientId: 'YT-CLI-001',
-    clientName: sanitize('MMR Constructions'),
-    contactPerson: sanitize('Rajesh Sharma'),
-    mobile: sanitize('9878789878'),
+    clientName: sanitize('MMRCONSTRUCTION AND DEVELOPERS PRIVATE LIMITED'),
+    contactPerson: sanitize('Suraj Kumar Verma'),
+    mobile: sanitize('7071951011'),
     email: sanitize('contact@mmrconstructions.in'),
-    address: sanitize('Sumel Business Park 7, Ring Road, Ahmedabad, Gujarat - 380023'),
-    state: sanitize('Gujarat'),
-    stateCode: sanitize('24'),
-    gstin: sanitize('24AABBA7890B1ZB'),
-    createdDate: new Date().toISOString().slice(0, 10)
+    address: sanitize('SHESHPUR, Unnao- 209801'),
+    state: sanitize('Uttar Pradesh'),
+    stateCode: sanitize('09'),
+    gstin: sanitize('09AATCM6753A1Z5'),
+    createdDate: '2026-11-06'
   };
-  clientsSheet.addRow(objectToRowArray('Clients', sampleClient));
+  clientsSheet.addRow(objectToRowArray('Clients', mmrClient));
+
+  const mmrInvoice = {
+    invoiceNo: 'YOGTECK-2026-1',
+    clientId: 'YT-CLI-001',
+    invoiceDate: '2026-11-06',
+    dueDate: '2026-09-13',
+    taxableTotal: 250000,
+    taxTotal: 0,
+    grandTotal: 250000,
+    status: 'Partially Paid',
+    publicToken: 'yt_tok_mmr_live_invoice_2026',
+    notes: sanitize('No Cheque or Cash accepted. Only UPI or Net Banking allowed.'),
+    challanNo: sanitize('33'),
+    challanDate: '2026-11-06',
+    ewayBillNo: sanitize('78456378'),
+    transport: sanitize('Transporter'),
+    transportId: sanitize('ID'),
+    planName: sanitize('Annual Cloud & Maintenance Plan'),
+    serviceStartDate: '2026-11-06',
+    serviceExpiryDate: '2027-02-07',
+    renewalDueDate: '2026-09-13'
+  };
+  invoicesSheet.addRow(objectToRowArray('Invoices', mmrInvoice));
+
+  const items = [
+    {
+      invoiceNo: 'YOGTECK-2026-1',
+      srNo: 1,
+      description: sanitize('Web Application & Cloud Software Development'),
+      paymentDate: '2026-11-06',
+      hsnSac: '',
+      qty: 1,
+      unit: sanitize('NOS'),
+      rate: 40000,
+      taxableValue: 40000,
+      taxPercent: 0,
+      taxAmount: 0,
+      lineTotal: 40000
+    },
+    {
+      invoiceNo: 'YOGTECK-2026-1',
+      srNo: 2,
+      description: sanitize('Distributed Ledger Technology'),
+      paymentDate: '2026-11-06',
+      hsnSac: '',
+      qty: 1,
+      unit: sanitize('NOS'),
+      rate: 45000,
+      taxableValue: 45000,
+      taxPercent: 0,
+      taxAmount: 0,
+      lineTotal: 45000
+    },
+    {
+      invoiceNo: 'YOGTECK-2026-1',
+      srNo: 3,
+      description: sanitize('Services Chagre'),
+      paymentDate: '2026-11-06',
+      hsnSac: '',
+      qty: 1,
+      unit: sanitize('NOS'),
+      rate: 5000,
+      taxableValue: 5000,
+      taxPercent: 0,
+      taxAmount: 0,
+      lineTotal: 5000
+    }
+  ];
+  items.forEach(it => itemsSheet.addRow(objectToRowArray('InvoiceItems', it)));
+
+  const payments = [
+    {
+      paymentId: 'YT-PAY-001',
+      invoiceNo: 'YOGTECK-2026-1',
+      amountPaid: 40000,
+      paymentDate: '2026-11-06',
+      mode: sanitize('UPI'),
+      note: sanitize('Part 1: Web Application & Cloud Software Development')
+    },
+    {
+      paymentId: 'YT-PAY-002',
+      invoiceNo: 'YOGTECK-2026-1',
+      amountPaid: 45000,
+      paymentDate: '2026-11-06',
+      mode: sanitize('UPI'),
+      note: sanitize('Part 2: Distributed Ledger Technology')
+    },
+    {
+      paymentId: 'YT-PAY-003',
+      invoiceNo: 'YOGTECK-2026-1',
+      amountPaid: 5000,
+      paymentDate: '2026-11-06',
+      mode: sanitize('UPI'),
+      note: sanitize('Part 3: Services Chagre')
+    }
+  ];
+  payments.forEach(p => paymentsSheet.addRow(objectToRowArray('Payments', p)));
 
   await workbook.xlsx.writeFile(CLIENTS_MASTER_PATH);
 }
@@ -346,12 +448,15 @@ async function getAllInvoiceItems() {
   return rows.map(item => ({
     ...item,
     srNo: Number(item.srNo) || 1,
+    description: item.description || '',
+    paymentDate: item.paymentDate || '',
     qty: Number(item.qty) || 1,
+    unit: item.unit || 'NOS',
     rate: roundToTwo(item.rate),
     taxableValue: roundToTwo(item.taxableValue),
     taxPercent: Number(item.taxPercent) || 0,
     taxAmount: roundToTwo(item.taxAmount),
-    lineTotal: roundToTwo(item.lineTotal)
+    lineTotal: roundToTwo(item.lineTotal || (Number(item.qty || 1) * Number(item.rate || 0)))
   }));
 }
 
