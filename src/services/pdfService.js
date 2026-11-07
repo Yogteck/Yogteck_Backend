@@ -256,6 +256,29 @@ async function buildInvoiceHtml(invoice, company, baseUrl = 'https://yogteck.com
     vertical-align: top;
   }
 
+  .inv-logo-box {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 5px;
+  }
+
+  .yt-square-logo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 58px;
+    height: 46px;
+    border: 2.5px solid #000000;
+    font-size: 22px;
+    font-weight: 900;
+    line-height: 44px;
+    letter-spacing: 1px;
+    color: #000000;
+    text-align: center;
+    box-sizing: border-box;
+    margin-left: auto;
+  }
+
   .company-logo {
     max-height: 58px;
     max-width: 140px;
@@ -784,7 +807,9 @@ async function buildInvoiceHtml(invoice, company, baseUrl = 'https://yogteck.com
         </div>
       </td>
       <td class="header-right">
-        ${logoBase64 ? `<img src="${logoBase64}" class="company-logo" alt="YOGTECK Logo">` : ''}
+        <div class="inv-logo-box">
+          <div class="yt-square-logo">YT</div>
+        </div>
         <div class="contact-meta">
           <div><strong>Tel :</strong> ${company.contact}</div>
           <div><strong>Web :</strong> www.yogteck.com</div>
