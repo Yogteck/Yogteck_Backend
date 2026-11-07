@@ -291,12 +291,12 @@ async function ensureClientsMasterInitialized() {
     publicToken: 'yt_tok_mmr_live_invoice_2026',
     notes: sanitize('No Cheque or Cash accepted. Only UPI or Net Banking allowed.'),
     challanNo: sanitize('CLG-AXS-116745'),
-    challanDate: '2026-11-06',
+    challanDate: '2026-05-27',
     ewayBillNo: sanitize('78456378'),
     transport: sanitize('Transporter'),
     transportId: sanitize('ID'),
     planName: sanitize('Annual Cloud & Maintenance Plan'),
-    serviceStartDate: '2026-11-06',
+    serviceStartDate: '2026-05-27',
     serviceExpiryDate: '2027-02-07',
     renewalDueDate: '2026-09-13'
   };
@@ -307,8 +307,8 @@ async function ensureClientsMasterInitialized() {
       invoiceNo: 'YOGTECK-2026-1',
       srNo: 1,
       description: sanitize('Web Application & Cloud Software Development'),
-      paymentDate: '2026-11-06',
-      refNo: sanitize('UPI Ref : 374580831454\nUPI ID : 7071951011@ybl'),
+      paymentDate: '2026-05-27',
+      refNo: sanitize('CLG-AXS-116745'),
       hsnSac: '',
       qty: 1,
       unit: sanitize('NOS'),
@@ -321,21 +321,36 @@ async function ensureClientsMasterInitialized() {
     {
       invoiceNo: 'YOGTECK-2026-1',
       srNo: 2,
-      description: sanitize('Distributed Ledger Technology'),
-      paymentDate: '2026-11-06',
-      refNo: sanitize('UPI Ref : 704938145541\nUPI ID : 7071951011@ybl'),
+      description: sanitize('Distributed Ledger Technology (Milestone 2A)'),
+      paymentDate: '2026-07-29',
+      refNo: sanitize('UPI Ref : 374580831454\nUPI ID : 7071951011@ybl'),
       hsnSac: '',
       qty: 1,
       unit: sanitize('NOS'),
-      rate: 45000,
-      taxableValue: 45000,
+      rate: 43000,
+      taxableValue: 43000,
       taxPercent: 0,
       taxAmount: 0,
-      lineTotal: 45000
+      lineTotal: 43000
     },
     {
       invoiceNo: 'YOGTECK-2026-1',
       srNo: 3,
+      description: sanitize('Digital Infrastructure & Setup (Milestone 2B)'),
+      paymentDate: '2026-07-29',
+      refNo: sanitize('UPI Ref : 704938145541\nUPI ID : 7071951011@ybl'),
+      hsnSac: '',
+      qty: 1,
+      unit: sanitize('NOS'),
+      rate: 2000,
+      taxableValue: 2000,
+      taxPercent: 0,
+      taxAmount: 0,
+      lineTotal: 2000
+    },
+    {
+      invoiceNo: 'YOGTECK-2026-1',
+      srNo: 4,
       description: sanitize('Services Charge'),
       paymentDate: '2026-11-06',
       refNo: sanitize('UPI Ref : 287289156857\nUPI ID : 7071951011-2@axl'),
@@ -355,20 +370,28 @@ async function ensureClientsMasterInitialized() {
       paymentId: 'YT-PAY-001',
       invoiceNo: 'YOGTECK-2026-1',
       amountPaid: 40000,
-      paymentDate: '2026-11-06',
-      mode: sanitize('UPI'),
-      note: sanitize('Part 1: Web Application & Cloud Software Development [UPI Ref : 374580831454]')
+      paymentDate: '2026-05-27',
+      mode: sanitize('Cheque'),
+      note: sanitize('Cheque Clearance [Ref: CLG-AXS-116745]')
     },
     {
       paymentId: 'YT-PAY-002',
       invoiceNo: 'YOGTECK-2026-1',
-      amountPaid: 45000,
-      paymentDate: '2026-11-06',
+      amountPaid: 43000,
+      paymentDate: '2026-07-29',
       mode: sanitize('UPI'),
-      note: sanitize('Part 2: Distributed Ledger Technology [UPI Ref : 704938145541]')
+      note: sanitize('Part 2A: UPI Ref : 374580831454 [UPI ID: 7071951011@ybl]')
     },
     {
       paymentId: 'YT-PAY-003',
+      invoiceNo: 'YOGTECK-2026-1',
+      amountPaid: 2000,
+      paymentDate: '2026-07-29',
+      mode: sanitize('UPI'),
+      note: sanitize('Part 2B: UPI Ref : 704938145541 [UPI ID: 7071951011@ybl]')
+    },
+    {
+      paymentId: 'YT-PAY-004',
       invoiceNo: 'YOGTECK-2026-1',
       amountPaid: 5000,
       paymentDate: '2026-11-06',
@@ -873,8 +896,12 @@ async function updateInvoice(invoiceNo, invoiceData) {
                 invoiceNo,
                 amountPaid: it.lineTotal,
                 paymentDate: it.paymentDate || invoiceData.paymentDate || invoiceData.invoiceDate || new Date().toISOString().slice(0, 10),
-                mode: sanitize(invoiceData.paymentMode || 'UPI'),
-                note: sanitize(`Part ${idx + 1}: ${it.description || 'Installment'}`)
+                mode: sanitize(
+                  (it.refNo && it.refNo.includes('CLG')) || (it.description && it.description.toLowerCase().includes('cheque'))
+                    ? 'Cheque'
+                    : (invoiceData.paymentMode || 'UPI')
+                ),
+                note: sanitize(`Part ${idx + 1}: ${it.description || 'Installment'}${it.refNo ? ` [Ref: ${it.refNo}]` : ''}`)
               };
               paymentsSheet.addRow(objectToRowArray('Payments', paymentRow));
             });
